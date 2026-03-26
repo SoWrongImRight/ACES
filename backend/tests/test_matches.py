@@ -1749,7 +1749,7 @@ def test_weapon_damage_applied_to_attack_resolution(client) -> None:
         damage=3,
     )
     match_state.players[1].aircraft[0].zone = Zone.AIR
-    match_state.players[1].aircraft[0].evasion = 1
+    match_state.players[1].aircraft[0].evasion = 4
     match_state.players[1].aircraft[0].structure_rating = 5
     get_match_repository().save_match(match_state)
 

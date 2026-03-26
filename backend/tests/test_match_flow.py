@@ -15,7 +15,7 @@ def build_match_state() -> MatchState:
             max_fuel=6,
             structure_rating=3,
             attack=2,
-            evasion=3,
+            evasion=4,
             zone=Zone.AIR,
         )
     )

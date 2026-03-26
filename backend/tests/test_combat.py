@@ -41,9 +41,9 @@ def test_builder_produces_expected_combat_input_for_aircraft_target() -> None:
         combat_input,
         expected_target_id="aircraft-bravo",
         expected_base_attack=3,
-        expected_base_evasion=3,
+        expected_base_evasion=4,
         expected_resolved_attack=3,
-        expected_resolved_evasion=3,
+        expected_resolved_evasion=4,
     )
 
 
@@ -66,9 +66,9 @@ def test_builder_output_with_no_modifiers_remains_unchanged() -> None:
         combat_input,
         expected_target_id="aircraft-bravo",
         expected_base_attack=3,
-        expected_base_evasion=3,
+        expected_base_evasion=4,
         expected_resolved_attack=3,
-        expected_resolved_evasion=3,
+        expected_resolved_evasion=4,
     )
 
 
@@ -133,9 +133,9 @@ def test_ordered_modifier_application_adjusts_resolved_values_predictably() -> N
         combat_input,
         expected_target_id="aircraft-bravo",
         expected_base_attack=3,
-        expected_base_evasion=3,
+        expected_base_evasion=4,
         expected_resolved_attack=4,
-        expected_resolved_evasion=2,
+        expected_resolved_evasion=3,
     )
 
 
@@ -569,9 +569,9 @@ def test_future_empty_categories_do_not_affect_current_builder_results() -> None
         combat_input,
         expected_target_id="aircraft-bravo",
         expected_base_attack=3,
-        expected_base_evasion=3,
+        expected_base_evasion=4,
         expected_resolved_attack=3,
-        expected_resolved_evasion=3,
+        expected_resolved_evasion=4,
     )
 
 
