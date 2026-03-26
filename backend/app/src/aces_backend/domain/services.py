@@ -2,6 +2,7 @@ from dataclasses import dataclass, replace
 
 from aces_backend.domain.models import (
     ActiveBuff,
+    ActiveHazard,
     AircraftState,
     AttackTargetType,
     MatchEvent,
@@ -71,7 +72,7 @@ class MatchFlow:
             )
             for player in match_state.players
         ]
-        return replace(match_state, players=updated_players, active_buffs=[])
+        return replace(match_state, players=updated_players, active_buffs=[], active_hazards=[])
 
 
 class MatchStateUpdater:
@@ -128,6 +129,23 @@ class MatchStateUpdater:
     ) -> MatchState:
         remaining = [b for b in match_state.active_buffs if b.aircraft_id != aircraft_id]
         return replace(match_state, active_buffs=remaining)
+
+    def add_active_hazard(
+        self,
+        match_state: MatchState,
+        hazard: ActiveHazard,
+    ) -> MatchState:
+        return replace(match_state, active_hazards=[*match_state.active_hazards, hazard])
+
+    def consume_triggered_hazards(
+        self,
+        match_state: MatchState,
+        triggered: list[ActiveHazard],
+    ) -> MatchState:
+        """Remove exactly the hazard objects that triggered, matched by identity."""
+        triggered_ids = {id(h) for h in triggered}
+        remaining = [h for h in match_state.active_hazards if id(h) not in triggered_ids]
+        return replace(match_state, active_hazards=remaining)
 
     def launch_aircraft(
         self,

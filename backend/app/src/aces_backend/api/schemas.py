@@ -68,6 +68,15 @@ class ActiveBuffResponse(BaseModel):
     self_damage: int = 0
 
 
+class ActiveHazardResponse(BaseModel):
+    hazard_id: str
+    owning_player_id: str
+    trigger: str
+    attack_delta: int = 0
+    evasion_delta: int = 0
+    cancels_weapon_bonus: bool = False
+
+
 class MatchEventResponse(BaseModel):
     sequence: int
     action_type: str
@@ -95,6 +104,7 @@ class MatchStateResponse(BaseModel):
     loser_player_id: str | None = None
     event_history: list[MatchEventResponse]
     active_buffs: list[ActiveBuffResponse] = Field(default_factory=list)
+    active_hazards: list[ActiveHazardResponse] = Field(default_factory=list)
     players: list[PlayerStateResponse]
 
 
@@ -188,12 +198,19 @@ class PlayOperationActionRequest(BaseModel):
     aircraft_id: str = Field(..., description="Target aircraft for the operation.")
 
 
+class PlayHazardActionRequest(BaseModel):
+    action_type: Literal["play_hazard"]
+    player_id: str = Field(..., description="Non-active player playing the hazard.")
+    hazard_name: str = Field(..., description="Name of the hazard to play.")
+
+
 ActionExecutionRequest = Annotated[
     LaunchAircraftActionRequest
     | RefitAircraftActionRequest
     | ReturnToRunwayActionRequest
     | AttackAircraftActionRequest
-    | PlayOperationActionRequest,
+    | PlayOperationActionRequest
+    | PlayHazardActionRequest,
     Discriminator("action_type"),
 ]
 

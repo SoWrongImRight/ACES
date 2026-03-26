@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from aces_backend.domain.models import ActiveBuff, AttackTargetType, MatchEvent, MatchState, Phase, PlayerState, Zone
+from aces_backend.domain.models import ActiveBuff, ActiveHazard, AttackTargetType, HazardTrigger, MatchEvent, MatchState, Phase, PlayerState, Zone
 from aces_backend.domain.services import (
     MatchHistoryManager,
     MatchOutcomeEvaluator,
@@ -9,6 +9,7 @@ from aces_backend.domain.services import (
 )
 from aces_backend.rules.combat import (
     build_attack_combat_input,
+    collect_hazard_modifiers,
     collect_tactic_modifiers,
     CombatResult,
     CombatStatModifier,
@@ -51,6 +52,30 @@ TACTIC_BUFF_DEFINITIONS: dict[str, dict] = {
     "target-lock": {"attack_delta": 2, "evasion_delta": 0, "self_damage": 0},
     "afterburner": {"attack_delta": 0, "evasion_delta": 2, "self_damage": 0},
     "full-send": {"attack_delta": 3, "evasion_delta": 0, "self_damage": 1},
+}
+
+HAZARD_DEFINITIONS: dict[str, dict] = {
+    "flak-burst": {
+        "cp_cost": 1,
+        "trigger": HazardTrigger.ON_ANY_ATTACK,
+        "attack_delta": -1,
+        "evasion_delta": 0,
+        "cancels_weapon_bonus": False,
+    },
+    "missile-jam": {
+        "cp_cost": 1,
+        "trigger": HazardTrigger.ON_MISSILE_ATTACK,
+        "attack_delta": 0,
+        "evasion_delta": 0,
+        "cancels_weapon_bonus": True,
+    },
+    "crosswind": {
+        "cp_cost": 1,
+        "trigger": HazardTrigger.ON_ANY_ATTACK,
+        "attack_delta": 0,
+        "evasion_delta": -1,
+        "cancels_weapon_bonus": False,
+    },
 }
 
 
@@ -156,6 +181,13 @@ class RulesEngine:
                 aircraft_id=action_intent.actor_id,
             )
 
+        if action_intent.action_type == "play_hazard":
+            return self._validate_play_hazard(
+                match_state=match_state,
+                player_id=action_intent.player_id,
+                hazard_name=action_intent.operation_name,
+            )
+
         if action_intent.player_id != match_state.active_player_id:
 
             return ActionValidationResult(
@@ -206,6 +238,9 @@ class RulesEngine:
         if action_intent.action_type == "play_operation":
             return self._execute_play_operation(match_state, action_intent)
 
+        if action_intent.action_type == "play_hazard":
+            return self._execute_play_hazard(match_state, action_intent)
+
         return ActionExecutionResult(
             is_valid=False,
             reason=(
@@ -252,10 +287,17 @@ class RulesEngine:
             if target.target_type == AttackTargetType.RUNWAY
             else None
         )
+        defender_id = target.target_id if target.target_type == AttackTargetType.AIRCRAFT else None
         tactic_modifiers: list[CombatStatModifier] = collect_tactic_modifiers(
             attacker_id=action_intent.actor_id,
-            defender_id=target.target_id if target.target_type == AttackTargetType.AIRCRAFT else None,
+            defender_id=defender_id,
             active_buffs=match_state.active_buffs,
+        )
+        hazard_modifiers, triggered_hazards = collect_hazard_modifiers(
+            attacker=attacking_aircraft,
+            defender_id=defender_id,
+            attacking_player_id=action_intent.player_id,
+            active_hazards=match_state.active_hazards,
         )
         combat_input = build_attack_combat_input(
             action_type=action_intent.action_type,
@@ -265,7 +307,7 @@ class RulesEngine:
             target_id=target.target_id,
             attacking_aircraft=attacking_aircraft,
             target_aircraft=target_aircraft,
-            extra_modifiers=tactic_modifiers,
+            extra_modifiers=[*tactic_modifiers, *hazard_modifiers],
             die_roll=self._die_roller() if self._die_roller is not None else None,
         )
         combat_result = resolve_attack_combat_result(
@@ -282,6 +324,11 @@ class RulesEngine:
             updated_match_state = self._state_updater.consume_buffs_for_aircraft(
                 match_state=updated_match_state,
                 aircraft_id=target.target_id,
+            )
+        if triggered_hazards:
+            updated_match_state = self._state_updater.consume_triggered_hazards(
+                match_state=updated_match_state,
+                triggered=triggered_hazards,
             )
         updated_match_state = self._state_updater.resolve_attack(
             match_state=updated_match_state,
@@ -647,6 +694,121 @@ class RulesEngine:
                 outcome_type=f"operation_{action_intent.operation_name}_played",
                 from_zone=zone,
                 to_zone=zone,
+            )
+        ]
+        updated_match_state, events = self._history_manager.append_events(updated_match_state, events)
+        return ActionExecutionResult(
+            is_valid=True,
+            reason=None,
+            match_state=updated_match_state,
+            resolution=resolution,
+            events=events,
+            combat_result=None,
+        )
+
+    def _validate_play_hazard(
+        self,
+        match_state: MatchState,
+        player_id: str,
+        hazard_name: str,
+    ) -> ActionValidationResult:
+        if match_state.is_terminal:
+            return ActionValidationResult(
+                is_valid=False,
+                reason="Match is already over.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        if player_id == match_state.active_player_id:
+            return ActionValidationResult(
+                is_valid=False,
+                reason="Hazards may only be played by the non-active player.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        if hazard_name not in HAZARD_DEFINITIONS:
+            return ActionValidationResult(
+                is_valid=False,
+                reason=f"Unknown hazard: '{hazard_name}'.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        cp_cost = HAZARD_DEFINITIONS[hazard_name]["cp_cost"]
+        player_state = match_state.get_player(player_id)
+        if player_state is None:
+            return ActionValidationResult(
+                is_valid=False,
+                reason="Acting player was not found in this match.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        if player_state.command_points < cp_cost:
+            return ActionValidationResult(
+                is_valid=False,
+                reason=f"Not enough command points to play '{hazard_name}' (costs {cp_cost}).",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        return ActionValidationResult(
+            is_valid=True,
+            reason=None,
+            legal_actor_ids=[player_id],
+            legal_target_ids=[],
+        )
+
+    def _execute_play_hazard(
+        self,
+        match_state: MatchState,
+        action_intent: ActionIntent,
+    ) -> ActionExecutionResult:
+        validation = self._validate_play_hazard(
+            match_state=match_state,
+            player_id=action_intent.player_id,
+            hazard_name=action_intent.operation_name,
+        )
+        if not validation.is_valid:
+            return ActionExecutionResult(
+                is_valid=False,
+                reason=validation.reason,
+                match_state=match_state,
+                resolution=None,
+                combat_result=None,
+            )
+
+        defn = HAZARD_DEFINITIONS[action_intent.operation_name]
+        cp_cost = defn["cp_cost"]
+        updated_match_state = self._state_updater.decrement_cp(
+            match_state=match_state,
+            player_id=action_intent.player_id,
+            amount=cp_cost,
+        )
+        hazard = ActiveHazard(
+            hazard_id=action_intent.operation_name,
+            owning_player_id=action_intent.player_id,
+            trigger=defn["trigger"],
+            attack_delta=defn["attack_delta"],
+            evasion_delta=defn["evasion_delta"],
+            cancels_weapon_bonus=defn["cancels_weapon_bonus"],
+        )
+        updated_match_state = self._state_updater.add_active_hazard(updated_match_state, hazard)
+
+        resolution = ActionResolution(
+            aircraft_id=action_intent.actor_id,
+            action_type=action_intent.action_type,
+            previous_zone=Zone.RUNWAY.value,
+            current_zone=Zone.RUNWAY.value,
+        )
+        events = [
+            MatchEvent(
+                sequence=0,
+                action_type=action_intent.action_type,
+                actor_player_id=action_intent.player_id,
+                outcome_type=f"hazard_{action_intent.operation_name}_played",
             )
         ]
         updated_match_state, events = self._history_manager.append_events(updated_match_state, events)

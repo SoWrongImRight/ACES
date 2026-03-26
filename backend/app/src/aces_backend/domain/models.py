@@ -19,6 +19,11 @@ class AttackTargetType(StrEnum):
     RUNWAY = "runway"
 
 
+class HazardTrigger(StrEnum):
+    ON_ANY_ATTACK = "on_any_attack"
+    ON_MISSILE_ATTACK = "on_missile_attack"
+
+
 PHASE_ORDER: tuple[Phase, ...] = (
     Phase.COMMAND,
     Phase.GROUND,
@@ -51,6 +56,16 @@ class PilotState:
     evasion_bonus: int = 0
     fuel_bonus: int = 0
     structure_bonus: int = 0
+
+
+@dataclass(slots=True)
+class ActiveHazard:
+    hazard_id: str
+    owning_player_id: str
+    trigger: HazardTrigger
+    attack_delta: int = 0
+    evasion_delta: int = 0
+    cancels_weapon_bonus: bool = False
 
 
 @dataclass(slots=True)
@@ -125,6 +140,7 @@ class MatchState:
     loser_player_id: str | None = None
     event_history: list[MatchEvent] = field(default_factory=list)
     active_buffs: list[ActiveBuff] = field(default_factory=list)
+    active_hazards: list[ActiveHazard] = field(default_factory=list)
     next_event_sequence: int = 1
 
     def get_player(self, player_id: str) -> PlayerState | None:
@@ -155,6 +171,7 @@ class MatchState:
                 loser_player_id=self.loser_player_id,
                 event_history=self.event_history,
                 active_buffs=self.active_buffs,
+                active_hazards=self.active_hazards,
                 next_event_sequence=self.next_event_sequence,
             )
 
@@ -173,5 +190,6 @@ class MatchState:
             loser_player_id=self.loser_player_id,
             event_history=self.event_history,
             active_buffs=[],
+            active_hazards=[],
             next_event_sequence=self.next_event_sequence,
         )

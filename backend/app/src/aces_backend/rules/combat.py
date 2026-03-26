@@ -5,8 +5,10 @@ from typing import Any
 
 from aces_backend.domain.models import (
     ActiveBuff,
+    ActiveHazard,
     AircraftState,
     AttackTargetType,
+    HazardTrigger,
     MatchEvent,
     MatchState,
     PlayerState,
@@ -186,6 +188,71 @@ def collect_tactic_modifiers(
                 )
             )
     return modifiers
+
+
+def collect_hazard_modifiers(
+    *,
+    attacker: AircraftState | None,
+    defender_id: str | None,
+    attacking_player_id: str,
+    active_hazards: list[ActiveHazard],
+) -> tuple[list[CombatStatModifier], list[ActiveHazard]]:
+    """Return (modifiers, triggered_hazards) for hazards that fire on this attack.
+
+    Only hazards owned by the non-attacking player are evaluated.
+    Triggered hazards must be consumed from state after combat resolves.
+    """
+    modifiers: list[CombatStatModifier] = []
+    triggered: list[ActiveHazard] = []
+
+    attacker_has_missile = (
+        attacker is not None
+        and attacker.weapon is not None
+        and not attacker.weapon.exhausted
+        and "missile" in attacker.weapon.tags
+    )
+
+    for hazard in active_hazards:
+        if hazard.owning_player_id == attacking_player_id:
+            continue  # hazards only apply to the opponent's attacks
+
+        fires = (
+            hazard.trigger == HazardTrigger.ON_ANY_ATTACK
+            or (hazard.trigger == HazardTrigger.ON_MISSILE_ATTACK and attacker_has_missile)
+        )
+        if not fires:
+            continue
+
+        triggered.append(hazard)
+
+        if hazard.attack_delta != 0:
+            modifiers.append(
+                CombatStatModifier(
+                    category=CombatModifierCategory.HAZARD_DEBUFF,
+                    source=f"hazard:{hazard.hazard_id}",
+                    attack_delta=hazard.attack_delta,
+                )
+            )
+        if hazard.evasion_delta != 0 and defender_id is not None:
+            modifiers.append(
+                CombatStatModifier(
+                    category=CombatModifierCategory.HAZARD_DEBUFF,
+                    source=f"hazard:{hazard.hazard_id}",
+                    evasion_delta=hazard.evasion_delta,
+                )
+            )
+        if hazard.cancels_weapon_bonus and attacker is not None and attacker.weapon is not None:
+            weapon_bonus = attacker.weapon.attack_bonus if not attacker.weapon.exhausted else 0
+            if weapon_bonus != 0:
+                modifiers.append(
+                    CombatStatModifier(
+                        category=CombatModifierCategory.HAZARD_DEBUFF,
+                        source=f"hazard:{hazard.hazard_id}",
+                        attack_delta=-weapon_bonus,
+                    )
+                )
+
+    return modifiers, triggered
 
 
 def collect_attachment_attack_modifiers(

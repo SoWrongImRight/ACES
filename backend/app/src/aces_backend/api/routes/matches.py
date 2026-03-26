@@ -6,6 +6,7 @@ from aces_backend.config import GameSettings
 from aces_backend.api.schemas import (
     ActionExecutionRequest,
     ActiveBuffResponse,
+    ActiveHazardResponse,
     AircraftStateResponse,
     ActionExecutionResponse,
     ActionIntentRequest,
@@ -20,6 +21,7 @@ from aces_backend.api.schemas import (
     MatchSummaryResponse,
     PilotStateResponse,
     PlayerStateResponse,
+    PlayHazardActionRequest,
     PlayOperationActionRequest,
     RunwayStateResponse,
     TargetReferenceRequest,
@@ -128,6 +130,17 @@ def to_match_response(match_state: MatchState) -> MatchStateResponse:
                 self_damage=buff.self_damage,
             )
             for buff in match_state.active_buffs
+        ],
+        active_hazards=[
+            ActiveHazardResponse(
+                hazard_id=hazard.hazard_id,
+                owning_player_id=hazard.owning_player_id,
+                trigger=hazard.trigger,
+                attack_delta=hazard.attack_delta,
+                evasion_delta=hazard.evasion_delta,
+                cancels_weapon_bonus=hazard.cancels_weapon_bonus,
+            )
+            for hazard in match_state.active_hazards
         ],
         players=[to_player_response(player) for player in match_state.players],
     )
@@ -295,6 +308,13 @@ def execute_action(
             actor_id=request.aircraft_id,
             player_id=request.player_id,
             operation_name=request.operation_name,
+        )
+    elif isinstance(request, PlayHazardActionRequest):
+        action_intent = ActionIntent(
+            action_type=request.action_type,
+            actor_id=request.player_id,
+            player_id=request.player_id,
+            operation_name=request.hazard_name,
         )
     else:
         action_intent = ActionIntent(

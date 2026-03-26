@@ -1,5 +1,5 @@
 from aces_backend.api.dependencies import get_match_repository
-from aces_backend.domain.models import ActiveBuff, AttackTargetType, Phase, PilotState, WeaponState, Zone
+from aces_backend.domain.models import ActiveBuff, ActiveHazard, AttackTargetType, HazardTrigger, Phase, PilotState, WeaponState, Zone
 from aces_backend.rules.engine import ActionIntent, RulesEngine, TargetReference
 
 from helpers import assert_attack_execution_alignment, make_match_state
@@ -2197,3 +2197,268 @@ def test_match_state_active_buffs_empty_by_default(client) -> None:
     assert response.status_code == 201
     payload = response.json()
     assert payload["match_state"]["active_buffs"] == []
+
+
+# --- Hazard system ---
+
+
+def test_play_hazard_flak_burst_adds_active_hazard(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[1].command_points = 2
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_hazard",
+            "player_id": "player-2",
+            "hazard_name": "flak-burst",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "resolved"
+    hazards = payload["match_state"]["active_hazards"]
+    assert len(hazards) == 1
+    assert hazards[0]["hazard_id"] == "flak-burst"
+    assert hazards[0]["owning_player_id"] == "player-2"
+    assert hazards[0]["attack_delta"] == -1
+    assert payload["match_state"]["players"][1]["command_points"] == 1
+
+
+def test_play_hazard_rejects_active_player(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].command_points = 2
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_hazard",
+            "player_id": "player-1",
+            "hazard_name": "flak-burst",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "rejected"
+    assert "non-active" in payload["reason"].lower()
+
+
+def test_play_hazard_rejects_unknown_hazard(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[1].command_points = 2
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_hazard",
+            "player_id": "player-2",
+            "hazard_name": "nuke-everything",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "rejected"
+    assert "unknown hazard" in payload["reason"].lower()
+
+
+def test_play_hazard_rejects_insufficient_cp(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[1].command_points = 0
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_hazard",
+            "player_id": "player-2",
+            "hazard_name": "flak-burst",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "rejected"
+    assert "command points" in payload["reason"].lower()
+
+
+def test_flak_burst_reduces_attacker_attack_in_combat(client) -> None:
+    """flak-burst (-1 attack) should reduce the attacker's resolved attack."""
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[0].aircraft[0].attack = 1
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    match_state.players[1].aircraft[0].evasion = 99
+    match_state.active_hazards = [
+        ActiveHazard(
+            hazard_id="flak-burst",
+            owning_player_id="player-2",
+            trigger=HazardTrigger.ON_ANY_ATTACK,
+            attack_delta=-1,
+        )
+    ]
+    get_match_repository().save_match(match_state)
+
+    engine = RulesEngine(die_roller=lambda: 6)
+    # attack=1 + roll=6 - flak=1 = 6; evasion=99 → still a miss; but with no hazard it would be 7
+    result = engine.execute_action(
+        match_state,
+        ActionIntent(
+            action_type="attack_aircraft",
+            actor_id="aircraft-alpha",
+            player_id="player-1",
+            selected_targets=[TargetReference(target_type=AttackTargetType.AIRCRAFT, target_id="aircraft-bravo")],
+        ),
+    )
+    assert result.is_valid
+    # Confirm hazard was consumed
+    assert result.match_state.active_hazards == []
+
+
+def test_flak_burst_consumed_after_attack(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    match_state.active_hazards = [
+        ActiveHazard(
+            hazard_id="flak-burst",
+            owning_player_id="player-2",
+            trigger=HazardTrigger.ON_ANY_ATTACK,
+            attack_delta=-1,
+        )
+    ]
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "attack_aircraft",
+            "actor_player_id": "player-1",
+            "attacking_aircraft_id": "aircraft-alpha",
+            "target": {"target_type": "aircraft", "target_id": "aircraft-bravo"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "resolved"
+    assert payload["match_state"]["active_hazards"] == []
+
+
+def test_missile_jam_fires_only_on_missile_weapon(client) -> None:
+    """missile-jam should NOT trigger against a cannon-equipped aircraft."""
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[0].aircraft[0].weapon = WeaponState(
+        weapon_id="weapon-1",
+        name="20mm Cannon",
+        attack_bonus=2,
+        damage=2,
+        tags=["cannon"],
+    )
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    match_state.active_hazards = [
+        ActiveHazard(
+            hazard_id="missile-jam",
+            owning_player_id="player-2",
+            trigger=HazardTrigger.ON_MISSILE_ATTACK,
+            cancels_weapon_bonus=True,
+        )
+    ]
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "attack_aircraft",
+            "actor_player_id": "player-1",
+            "attacking_aircraft_id": "aircraft-alpha",
+            "target": {"target_type": "aircraft", "target_id": "aircraft-bravo"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "resolved"
+    # missile-jam did NOT trigger → hazard remains
+    assert len(payload["match_state"]["active_hazards"]) == 1
+
+
+def test_missile_jam_fires_on_missile_weapon(client) -> None:
+    """missile-jam cancels the weapon attack bonus when a missile is used."""
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[0].aircraft[0].weapon = WeaponState(
+        weapon_id="weapon-1",
+        name="Sidewinder Missile",
+        attack_bonus=3,
+        damage=3,
+        tags=["missile"],
+    )
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    match_state.active_hazards = [
+        ActiveHazard(
+            hazard_id="missile-jam",
+            owning_player_id="player-2",
+            trigger=HazardTrigger.ON_MISSILE_ATTACK,
+            cancels_weapon_bonus=True,
+        )
+    ]
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "attack_aircraft",
+            "actor_player_id": "player-1",
+            "attacking_aircraft_id": "aircraft-alpha",
+            "target": {"target_type": "aircraft", "target_id": "aircraft-bravo"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "resolved"
+    assert payload["match_state"]["active_hazards"] == []
+
+
+def test_hazards_cleared_on_turn_change(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.END
+    match_state.active_hazards = [
+        ActiveHazard(
+            hazard_id="flak-burst",
+            owning_player_id="player-2",
+            trigger=HazardTrigger.ON_ANY_ATTACK,
+            attack_delta=-1,
+        )
+    ]
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/advance-phase",
+        json={"player_id": "player-1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["match_state"]["active_hazards"] == []
+
+
+def test_match_state_active_hazards_empty_by_default(client) -> None:
+    response = client.post("/matches")
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["match_state"]["active_hazards"] == []
