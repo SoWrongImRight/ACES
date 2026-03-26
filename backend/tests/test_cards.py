@@ -68,6 +68,7 @@ def test_find_aircraft_returns_correct_stats() -> None:
     card = make_loader().find_aircraft("falcon-one")
     assert card is not None
     assert card.name == "Falcon One"
+    assert card.cp_cost == 1
     assert card.attack == 3
     assert card.evasion == 4
     assert card.structure_rating == 4
@@ -77,8 +78,23 @@ def test_find_aircraft_returns_correct_stats() -> None:
 def test_find_weapon_returns_correct_stats() -> None:
     card = make_loader().find_weapon("sidewinder-missile")
     assert card is not None
+    assert card.cp_cost == 1
     assert card.attack_bonus == 2
     assert card.damage == 3
+
+
+def test_all_cards_have_cp_cost() -> None:
+    loader = make_loader()
+    for card in loader.load_aircraft():
+        assert card.cp_cost >= 0, f"{card.card_id} missing cp_cost"
+    for card in loader.load_weapons():
+        assert card.cp_cost >= 0, f"{card.card_id} missing cp_cost"
+    for card in loader.load_pilots():
+        assert card.cp_cost >= 0, f"{card.card_id} missing cp_cost"
+    for card in loader.load_tactics():
+        assert card.cp_cost >= 0, f"{card.card_id} missing cp_cost"
+    for card in loader.load_hazards():
+        assert card.cp_cost >= 0, f"{card.card_id} missing cp_cost"
 
 
 def test_find_pilot_attack_only_bonus() -> None:

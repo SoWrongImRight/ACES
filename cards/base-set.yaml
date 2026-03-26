@@ -5,6 +5,7 @@ version: "1.0"
 aircraft:
   - id: falcon-one
     name: Falcon One
+    cp_cost: 1
     attack: 3
     evasion: 4
     structure_rating: 4
@@ -12,6 +13,7 @@ aircraft:
 
   - id: eagle-three
     name: Eagle Three
+    cp_cost: 1
     attack: 2
     evasion: 4
     structure_rating: 3
@@ -19,6 +21,7 @@ aircraft:
 
   - id: viper-two
     name: Viper Two
+    cp_cost: 1
     attack: 2
     evasion: 4
     structure_rating: 4
@@ -26,23 +29,151 @@ aircraft:
 
   - id: hawk-four
     name: Hawk Four
+    cp_cost: 1
     attack: 3
     evasion: 4
     structure_rating: 3
     max_fuel: 4
 
+  - id: raven-five
+    name: Raven Five
+    cp_cost: 1
+    attack: 2
+    evasion: 5
+    structure_rating: 3
+    max_fuel: 5
+
+  - id: thunder-six
+    name: Thunder Six
+    cp_cost: 1
+    attack: 4
+    evasion: 2
+    structure_rating: 5
+    max_fuel: 4
+
 weapons:
   - id: 20mm-cannon
     name: 20mm Cannon
+    cp_cost: 1
     attack_bonus: 1
     damage: 2
 
   - id: sidewinder-missile
     name: Sidewinder Missile
+    cp_cost: 1
     attack_bonus: 2
     damage: 3
+
+  - id: heavy-cannon
+    name: Heavy Cannon
+    cp_cost: 1
+    attack_bonus: 0
+    damage: 3
+
+  - id: long-range-missile
+    name: Long Range Missile
+    cp_cost: 1
+    attack_bonus: 1
+    damage: 4
+
+  - id: rocket-pod
+    name: Rocket Pod
+    cp_cost: 1
+    attack_bonus: 1
+    damage: 2
 
 pilots:
   - id: maverick
     name: Maverick
+    cp_cost: 1
     attack_bonus: 1
+
+  - id: ghost
+    name: Ghost
+    cp_cost: 1
+    evasion_bonus: 1
+
+  - id: viper
+    name: Viper
+    cp_cost: 1
+    fuel_bonus: 1
+
+  - id: bandit
+    name: Bandit
+    cp_cost: 1
+    structure_bonus: 1
+
+  - id: ace
+    name: Ace
+    cp_cost: 1
+    attack_bonus: 1
+    evasion_bonus: 1
+
+tactics:
+  - id: afterburner
+    name: Afterburner
+    cp_cost: 1
+    text: "Gain +2 evasion during this combat."
+
+  - id: target-lock
+    name: Target Lock
+    cp_cost: 1
+    text: "Gain +2 attack during this combat."
+
+  - id: full-send
+    name: Full Send
+    cp_cost: 1
+    text: "Gain +3 attack during this combat. Take 1 damage after combat resolves."
+
+  - id: fuel-conserve
+    name: Fuel Conserve
+    cp_cost: 1
+    text: "Reduce fuel spent this round by 1."
+
+  - id: evasive-maneuvers
+    name: Evasive Maneuvers
+    cp_cost: 1
+    text: "Reduce incoming damage by 2 during this combat."
+
+hazards:
+  - id: flak-burst
+    name: Flak Burst
+    cp_cost: 1
+    trigger: "When an opponent declares an attack."
+    text: "That opponent gets -1 attack for this combat."
+
+  - id: missile-jam
+    name: Missile Jam
+    cp_cost: 1
+    trigger: "When an opponent attacks with a missile weapon."
+    text: "Cancel that weapon's attack bonus for this combat."
+
+  - id: fuel-leak
+    name: Fuel Leak
+    cp_cost: 1
+    trigger: "When an opponent boosts evasion."
+    text: "That opponent loses 1 fuel."
+
+  - id: stall-out
+    name: Stall Out
+    cp_cost: 1
+    trigger: "When an opponent plays a tactic that increases attack."
+    text: "That opponent gets -1 evasion for this combat."
+
+  - id: structural-hit
+    name: Structural Hit
+    cp_cost: 1
+    trigger: "After an opponent deals damage."
+    text: "That opponent takes 1 damage."
+
+  - id: radar-spoof
+    name: Radar Spoof
+    cp_cost: 1
+    trigger: "When an opponent gains an attack bonus from a pilot or tactic."
+    text: "Reduce that bonus by 1."
+
+  - id: crosswind
+    name: Crosswind
+    cp_cost: 1
+    trigger: "When combat begins."
+    text: "Both aircraft get -1 evasion for this combat."

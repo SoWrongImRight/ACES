@@ -6,6 +6,7 @@ class AircraftCardDefinition(BaseModel):
 
     card_id: str = Field(alias="id")
     name: str
+    cp_cost: int
     attack: int
     evasion: int
     structure_rating: int
@@ -17,6 +18,7 @@ class WeaponCardDefinition(BaseModel):
 
     card_id: str = Field(alias="id")
     name: str
+    cp_cost: int
     attack_bonus: int
     damage: int = 1
 
@@ -26,6 +28,7 @@ class PilotCardDefinition(BaseModel):
 
     card_id: str = Field(alias="id")
     name: str
+    cp_cost: int
     attack_bonus: int = 0
     evasion_bonus: int = 0
     fuel_bonus: int = 0
@@ -37,6 +40,7 @@ class TacticCardDefinition(BaseModel):
 
     card_id: str = Field(alias="id")
     name: str
+    cp_cost: int
     text: str
 
 
@@ -45,5 +49,6 @@ class HazardCardDefinition(BaseModel):
 
     card_id: str = Field(alias="id")
     name: str
+    cp_cost: int
     trigger: str
     text: str
