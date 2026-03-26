@@ -39,6 +39,7 @@ class WeaponState:
     name: str
     attack_bonus: int
     damage: int = 1
+    tags: list[str] = field(default_factory=list)
     exhausted: bool = False
 
 

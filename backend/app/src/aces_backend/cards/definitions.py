@@ -21,6 +21,7 @@ class WeaponCardDefinition(BaseModel):
     cp_cost: int
     attack_bonus: int
     damage: int = 1
+    tags: list[str] = Field(default_factory=list)
 
 
 class PilotCardDefinition(BaseModel):

@@ -37,6 +37,7 @@ class WeaponStateResponse(BaseModel):
     name: str
     attack_bonus: int
     damage: int
+    tags: list[str] = Field(default_factory=list)
     exhausted: bool
 
 
