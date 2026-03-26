@@ -503,6 +503,14 @@ class RulesEngine:
                 legal_target_ids=[],
             )
 
+        if aircraft_state.fuel <= 0:
+            return ActionValidationResult(
+                is_valid=False,
+                reason="Aircraft does not have enough fuel to launch.",
+                legal_actor_ids=legal_actor_ids,
+                legal_target_ids=[],
+            )
+
         return ActionValidationResult(
             is_valid=True,
             reason=None,
@@ -776,7 +784,10 @@ class RulesEngine:
         return [
             aircraft.aircraft_id
             for aircraft in player_state.aircraft
-            if aircraft.zone == Zone.RUNWAY and not aircraft.refit_this_turn and not aircraft.destroyed
+            if aircraft.zone == Zone.RUNWAY
+            and not aircraft.refit_this_turn
+            and not aircraft.destroyed
+            and aircraft.fuel > 0
         ]
 
     def _legal_refit_aircraft_ids(
@@ -852,7 +863,7 @@ class RulesEngine:
             for player in match_state.players
             if player.player_id != player_id
             for aircraft in player.aircraft
-            if aircraft.zone == Zone.AIR and not aircraft.destroyed
+            if aircraft.zone == Zone.AIR and not aircraft.destroyed and not aircraft.exhausted
         ]
         runway_targets = [
             TargetReference(

@@ -261,12 +261,14 @@ class MatchStateUpdater:
             return aircraft
         return replace(
             aircraft,
+            fuel=max(aircraft.fuel - 1, 0),
             weapon=(
                 replace(aircraft.weapon, exhausted=True)
                 if aircraft.weapon is not None and not aircraft.weapon.exhausted
                 else aircraft.weapon
             ),
             has_attacked_this_phase=True,
+            exhausted=True,
         )
 
     def _apply_aircraft_damage_if_matching(

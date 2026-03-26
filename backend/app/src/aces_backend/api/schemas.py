@@ -36,6 +36,7 @@ class WeaponStateResponse(BaseModel):
     weapon_id: str
     name: str
     attack_bonus: int
+    damage: int
     exhausted: bool
 
 

@@ -61,6 +61,7 @@ def test_get_match_serializes_attachment_state_when_present(client) -> None:
         "weapon_id": "weapon-1",
         "name": "Cannons",
         "attack_bonus": 2,
+        "damage": 1,
         "exhausted": True,
     }
     assert aircraft["pilot"] == {
@@ -1526,3 +1527,170 @@ def test_turn_handoff_resets_has_attacked_this_phase_without_breaking_actions(cl
     next_payload = next_turn_state.json()
     assert next_payload["match_state"]["active_player_id"] == "player-2"
     assert next_payload["match_state"]["players"][0]["aircraft"][0]["has_attacked_this_phase"] is False
+
+
+# --- Fuel consumption ---
+
+
+def test_attack_decrements_attacker_fuel_by_one(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[0].aircraft[0].fuel = 3
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "attack_aircraft",
+            "actor_player_id": "player-1",
+            "attacking_aircraft_id": "aircraft-alpha",
+            "target": {"target_type": "aircraft", "target_id": "aircraft-bravo"},
+        },
+    )
+
+    assert response.status_code == 200
+    attacker = response.json()["match_state"]["players"][0]["aircraft"][0]
+    assert attacker["fuel"] == 2
+
+
+def test_launch_is_rejected_when_aircraft_has_no_fuel(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].fuel = 0
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "launch_aircraft",
+            "player_id": "player-1",
+            "aircraft_id": "aircraft-alpha",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejected"
+    assert "fuel" in response.json()["reason"]
+
+
+def test_zero_fuel_aircraft_excluded_from_legal_launch_actors(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].fuel = 0
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions/preview",
+        json={
+            "action_type": "launch_aircraft",
+            "actor_id": "aircraft-alpha",
+            "player_id": "player-1",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "aircraft-alpha" not in response.json()["legal_actor_ids"]
+
+
+# --- Aircraft exhaust on attack ---
+
+
+def test_attacking_aircraft_becomes_exhausted(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "attack_aircraft",
+            "actor_player_id": "player-1",
+            "attacking_aircraft_id": "aircraft-alpha",
+            "target": {"target_type": "aircraft", "target_id": "aircraft-bravo"},
+        },
+    )
+
+    assert response.status_code == 200
+    attacker = response.json()["match_state"]["players"][0]["aircraft"][0]
+    assert attacker["exhausted"] is True
+
+
+def test_exhausted_aircraft_cannot_be_targeted(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    match_state.players[1].aircraft[0].exhausted = True
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions/preview",
+        json={
+            "action_type": "attack_aircraft",
+            "actor_id": "aircraft-alpha",
+            "player_id": "player-1",
+            "selected_targets": [{"target_type": "aircraft", "target_id": "aircraft-bravo"}],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["is_valid"] is False
+    assert "aircraft-bravo" not in payload["legal_target_ids"]
+
+
+# --- Variable weapon damage ---
+
+
+def test_weapon_damage_field_is_exposed_in_match_state(client) -> None:
+    match_state = make_match_state()
+    match_state.players[0].aircraft[0].weapon = WeaponState(
+        weapon_id="weapon-1",
+        name="Heavy Cannon",
+        attack_bonus=1,
+        damage=3,
+    )
+    get_match_repository().save_match(match_state)
+
+    response = client.get("/matches/match-123")
+
+    assert response.status_code == 200
+    weapon = response.json()["players"][0]["aircraft"][0]["weapon"]
+    assert weapon["damage"] == 3
+
+
+def test_weapon_damage_applied_to_attack_resolution(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[0].aircraft[0].attack = 10
+    match_state.players[0].aircraft[0].weapon = WeaponState(
+        weapon_id="weapon-1",
+        name="Heavy Cannon",
+        attack_bonus=0,
+        damage=3,
+    )
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    match_state.players[1].aircraft[0].evasion = 1
+    match_state.players[1].aircraft[0].structure_rating = 5
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "attack_aircraft",
+            "actor_player_id": "player-1",
+            "attacking_aircraft_id": "aircraft-alpha",
+            "target": {"target_type": "aircraft", "target_id": "aircraft-bravo"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action_result"]["result_type"] == "hit"
+    assert payload["action_result"]["structure_rating_change"] == -3
+    assert payload["match_state"]["players"][1]["aircraft"][0]["structure_rating"] == 2

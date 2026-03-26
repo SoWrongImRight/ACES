@@ -23,6 +23,7 @@ class CombatInput:
     base_evasion: int | None
     resolved_attack: int
     resolved_evasion: int | None
+    weapon_damage: int = 1
 
 
 @dataclass(slots=True)
@@ -85,6 +86,13 @@ class CombatInputBuilder:
                 *(extra_modifiers or []),
             ],
         )
+        weapon_damage = (
+            attacking_aircraft.weapon.damage
+            if attacking_aircraft is not None
+            and attacking_aircraft.weapon is not None
+            and not attacking_aircraft.weapon.exhausted
+            else 1
+        )
         return CombatInput(
             action_type=action_type,
             actor_player_id=actor_player_id,
@@ -95,6 +103,7 @@ class CombatInputBuilder:
             base_evasion=base_evasion,
             resolved_attack=resolved_attack,
             resolved_evasion=resolved_evasion,
+            weapon_damage=weapon_damage,
         )
 
     def _gather_attack_modifiers(
@@ -249,10 +258,10 @@ def resolve_attack_combat_result(
         target_aircraft=target_aircraft,
     )
     structure_rating_delta = (
-        -1 if hit and combat_input.target_type == AttackTargetType.AIRCRAFT else 0
+        -combat_input.weapon_damage if hit and combat_input.target_type == AttackTargetType.AIRCRAFT else 0
     )
     runway_damage = (
-        1 if hit and combat_input.target_type == AttackTargetType.RUNWAY else 0
+        combat_input.weapon_damage if hit and combat_input.target_type == AttackTargetType.RUNWAY else 0
     )
     destroyed_entity_id = _destroyed_entity_id_for_attack(
         target_type=combat_input.target_type,

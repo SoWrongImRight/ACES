@@ -38,6 +38,7 @@ class WeaponState:
     weapon_id: str
     name: str
     attack_bonus: int
+    damage: int = 1
     exhausted: bool = False
 
 
