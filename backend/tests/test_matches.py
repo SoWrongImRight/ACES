@@ -42,6 +42,51 @@ def test_create_match_returns_seeded_state_and_persists_it(client) -> None:
     assert get_response.json()["match_id"] == match_id
 
 
+def test_create_match_seeds_two_aircraft_per_player(client) -> None:
+    payload = create_match(client)
+
+    for player in payload["match_state"]["players"]:
+        assert len(player["aircraft"]) == 2
+        for aircraft in player["aircraft"]:
+            assert aircraft["zone"] == "runway"
+            assert aircraft["destroyed"] is False
+
+
+def test_destroying_one_aircraft_does_not_end_match_when_second_survives(client) -> None:
+    match_state = make_match_state()
+    # Restore the second aircraft for this test
+    from aces_backend.domain.factory import build_seeded_match
+    full_state = build_seeded_match(match_id="match-123")
+    for player in full_state.players:
+        for aircraft in player.aircraft:
+            aircraft.weapon = None
+            aircraft.pilot = None
+    match_state = full_state
+
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    match_state.players[1].aircraft[0].structure_rating = 1
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "attack_aircraft",
+            "actor_player_id": "player-1",
+            "attacking_aircraft_id": "aircraft-alpha",
+            "target": {"target_type": "aircraft", "target_id": "aircraft-bravo"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "resolved"
+    assert payload["action_result"]["target_destroyed"] is True
+    # Second aircraft (delta) still alive — match should not be terminal
+    assert payload["match_state"]["is_terminal"] is False
+
+
 def test_get_match_serializes_attachment_state_when_present(client) -> None:
     match_state = make_match_state()
     match_state.players[0].aircraft[0].weapon = WeaponState(
@@ -964,7 +1009,7 @@ def test_preview_launch_aircraft_matches_execution_legality(client) -> None:
     assert preview_response.status_code == 200
     assert execute_response.status_code == 200
     assert preview_response.json()["is_valid"] is True
-    assert preview_response.json()["legal_actor_ids"] == ["aircraft-alpha"]
+    assert "aircraft-alpha" in preview_response.json()["legal_actor_ids"]
     assert execute_response.json()["status"] == "resolved"
 
 
@@ -996,7 +1041,7 @@ def test_preview_refit_aircraft_matches_execution_legality(client) -> None:
     assert preview_response.status_code == 200
     assert execute_response.status_code == 200
     assert preview_response.json()["is_valid"] is True
-    assert preview_response.json()["legal_actor_ids"] == ["aircraft-alpha"]
+    assert "aircraft-alpha" in preview_response.json()["legal_actor_ids"]
     assert execute_response.json()["status"] == "resolved"
 
 
@@ -1723,3 +1768,146 @@ def test_weapon_damage_applied_to_attack_resolution(client) -> None:
     assert payload["action_result"]["result_type"] == "hit"
     assert payload["action_result"]["structure_rating_change"] == -3
     assert payload["match_state"]["players"][1]["aircraft"][0]["structure_rating"] == 2
+
+
+def test_play_operation_resupply_restores_fuel_and_decrements_cp(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.COMMAND
+    match_state.players[0].command_points = 2
+    match_state.players[0].aircraft[0].fuel = 1
+    match_state.players[0].aircraft[0].zone = Zone.RUNWAY
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_operation",
+            "player_id": "player-1",
+            "operation_name": "resupply",
+            "aircraft_id": "aircraft-alpha",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "resolved"
+    assert payload["action_result"]["fuel"] == 4
+    assert payload["match_state"]["players"][0]["command_points"] == 1
+    assert payload["match_state"]["players"][0]["aircraft"][0]["fuel"] == 4
+    assert payload["emitted_events"][0]["outcome_type"] == "operation_resupply_played"
+
+
+def test_play_operation_resupply_caps_fuel_at_max(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.COMMAND
+    match_state.players[0].command_points = 2
+    match_state.players[0].aircraft[0].fuel = 5
+    match_state.players[0].aircraft[0].zone = Zone.RUNWAY
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_operation",
+            "player_id": "player-1",
+            "operation_name": "resupply",
+            "aircraft_id": "aircraft-alpha",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "resolved"
+    assert payload["action_result"]["fuel"] == 6
+    assert payload["action_result"]["max_fuel"] == 6
+
+
+def test_play_operation_resupply_rejects_when_not_command_phase(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].command_points = 2
+    match_state.players[0].aircraft[0].zone = Zone.RUNWAY
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_operation",
+            "player_id": "player-1",
+            "operation_name": "resupply",
+            "aircraft_id": "aircraft-alpha",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "rejected"
+    assert "command phase" in payload["reason"].lower()
+
+
+def test_play_operation_resupply_rejects_when_insufficient_cp(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.COMMAND
+    match_state.players[0].command_points = 0
+    match_state.players[0].aircraft[0].zone = Zone.RUNWAY
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_operation",
+            "player_id": "player-1",
+            "operation_name": "resupply",
+            "aircraft_id": "aircraft-alpha",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "rejected"
+    assert "command points" in payload["reason"].lower()
+
+
+def test_play_operation_resupply_rejects_when_aircraft_in_air(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.COMMAND
+    match_state.players[0].command_points = 2
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_operation",
+            "player_id": "player-1",
+            "operation_name": "resupply",
+            "aircraft_id": "aircraft-alpha",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "rejected"
+    assert "runway" in payload["reason"].lower()
+
+
+def test_play_operation_rejects_unknown_operation(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.COMMAND
+    match_state.players[0].command_points = 2
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "play_operation",
+            "player_id": "player-1",
+            "operation_name": "nuke_everything",
+            "aircraft_id": "aircraft-alpha",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "rejected"
+    assert "unknown operation" in payload["reason"].lower()

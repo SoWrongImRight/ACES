@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from aces_backend.domain.models import AttackTargetType, MatchEvent, MatchState, Phase, PlayerState, Zone
@@ -29,6 +30,13 @@ class ActionIntent:
     player_id: str
     selected_target_ids: list[str] = field(default_factory=list)
     selected_targets: list[TargetReference] = field(default_factory=list)
+    operation_name: str = ""
+
+
+OPERATION_CP_COSTS: dict[str, int] = {
+    "resupply": 1,
+}
+RESUPPLY_FUEL_AMOUNT = 3
 
 
 @dataclass(slots=True)
@@ -74,10 +82,11 @@ class ActionExecutionResult:
 class RulesEngine:
     """Centralizes backend-owned action legality and resolution."""
 
-    def __init__(self) -> None:
+    def __init__(self, die_roller: Callable[[], int] | None = None) -> None:
         self._state_updater = MatchStateUpdater()
         self._outcome_evaluator = MatchOutcomeEvaluator()
         self._history_manager = MatchHistoryManager()
+        self._die_roller = die_roller
 
     def preview_action(
         self,
@@ -124,7 +133,16 @@ class RulesEngine:
                 selected_target_ids=action_intent.selected_target_ids,
             )
 
+        if action_intent.action_type == "play_operation":
+            return self._validate_play_operation(
+                match_state=match_state,
+                player_id=action_intent.player_id,
+                operation_name=action_intent.operation_name,
+                aircraft_id=action_intent.actor_id,
+            )
+
         if action_intent.player_id != match_state.active_player_id:
+
             return ActionValidationResult(
                 is_valid=False,
                 reason="Only the active player may submit standard actions during their turn.",
@@ -170,10 +188,13 @@ class RulesEngine:
         if action_intent.action_type == "refit_aircraft":
             return self._execute_refit_aircraft(match_state, action_intent)
 
+        if action_intent.action_type == "play_operation":
+            return self._execute_play_operation(match_state, action_intent)
+
         return ActionExecutionResult(
             is_valid=False,
             reason=(
-                "Only launch_aircraft, refit_aircraft, return_to_runway, and attack_aircraft are executable in this slice."
+                "Only launch_aircraft, refit_aircraft, return_to_runway, attack_aircraft, and play_operation are executable in this slice."
             ),
             match_state=match_state,
             resolution=None,
@@ -224,6 +245,7 @@ class RulesEngine:
             target_id=target.target_id,
             attacking_aircraft=attacking_aircraft,
             target_aircraft=target_aircraft,
+            die_roll=self._die_roller() if self._die_roller is not None else None,
         )
         combat_result = resolve_attack_combat_result(
             combat_input=combat_input,
@@ -418,6 +440,158 @@ class RulesEngine:
             actor_player_id=action_intent.player_id,
             resolution=resolution,
         )
+        updated_match_state, events = self._history_manager.append_events(updated_match_state, events)
+        return ActionExecutionResult(
+            is_valid=True,
+            reason=None,
+            match_state=updated_match_state,
+            resolution=resolution,
+            events=events,
+            combat_result=None,
+        )
+
+    def _validate_play_operation(
+        self,
+        match_state: MatchState,
+        player_id: str,
+        operation_name: str,
+        aircraft_id: str,
+    ) -> ActionValidationResult:
+        if player_id != match_state.active_player_id:
+            return ActionValidationResult(
+                is_valid=False,
+                reason="Only the active player may play operations during their turn.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        if match_state.phase != Phase.COMMAND:
+            return ActionValidationResult(
+                is_valid=False,
+                reason="Operations may only be played during the command phase.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        if operation_name not in OPERATION_CP_COSTS:
+            return ActionValidationResult(
+                is_valid=False,
+                reason=f"Unknown operation: '{operation_name}'.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        cp_cost = OPERATION_CP_COSTS[operation_name]
+        player_state = match_state.get_player(player_id)
+        if player_state is None:
+            return ActionValidationResult(
+                is_valid=False,
+                reason="Acting player was not found in this match.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        if player_state.command_points < cp_cost:
+            return ActionValidationResult(
+                is_valid=False,
+                reason=f"Not enough command points to play '{operation_name}' (costs {cp_cost}).",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
+        if operation_name == "resupply":
+            aircraft_state = self._find_aircraft(player_state, aircraft_id)
+            if aircraft_state is None:
+                return ActionValidationResult(
+                    is_valid=False,
+                    reason="Target aircraft must belong to the acting player.",
+                    legal_actor_ids=[],
+                    legal_target_ids=[],
+                )
+            if aircraft_state.destroyed:
+                return ActionValidationResult(
+                    is_valid=False,
+                    reason="Cannot resupply a destroyed aircraft.",
+                    legal_actor_ids=[],
+                    legal_target_ids=[],
+                )
+            if aircraft_state.zone != Zone.RUNWAY:
+                return ActionValidationResult(
+                    is_valid=False,
+                    reason="Resupply can only target aircraft on the runway.",
+                    legal_actor_ids=[],
+                    legal_target_ids=[],
+                )
+
+        return ActionValidationResult(
+            is_valid=True,
+            reason=None,
+            legal_actor_ids=[aircraft_id],
+            legal_target_ids=[],
+        )
+
+    def _execute_play_operation(
+        self,
+        match_state: MatchState,
+        action_intent: ActionIntent,
+    ) -> ActionExecutionResult:
+        validation = self._validate_play_operation(
+            match_state=match_state,
+            player_id=action_intent.player_id,
+            operation_name=action_intent.operation_name,
+            aircraft_id=action_intent.actor_id,
+        )
+        if not validation.is_valid:
+            return ActionExecutionResult(
+                is_valid=False,
+                reason=validation.reason,
+                match_state=match_state,
+                resolution=None,
+                combat_result=None,
+            )
+
+        cp_cost = OPERATION_CP_COSTS[action_intent.operation_name]
+        updated_match_state = self._state_updater.decrement_cp(
+            match_state=match_state,
+            player_id=action_intent.player_id,
+            amount=cp_cost,
+        )
+
+        if action_intent.operation_name == "resupply":
+            updated_match_state = self._state_updater.restore_aircraft_fuel(
+                match_state=updated_match_state,
+                player_id=action_intent.player_id,
+                aircraft_id=action_intent.actor_id,
+                amount=RESUPPLY_FUEL_AMOUNT,
+            )
+
+        player_state = match_state.get_player(action_intent.player_id)
+        aircraft_state = self._find_aircraft(player_state, action_intent.actor_id)
+        updated_aircraft_state = self._find_aircraft(
+            updated_match_state.get_player(action_intent.player_id),
+            action_intent.actor_id,
+        )
+
+        zone = aircraft_state.zone if aircraft_state is not None else Zone.RUNWAY
+        resolution = ActionResolution(
+            aircraft_id=action_intent.actor_id,
+            action_type=action_intent.action_type,
+            previous_zone=zone.value,
+            current_zone=zone.value,
+            fuel=updated_aircraft_state.fuel if updated_aircraft_state is not None else None,
+            max_fuel=updated_aircraft_state.max_fuel if updated_aircraft_state is not None else None,
+        )
+        events = [
+            MatchEvent(
+                sequence=0,
+                action_type=action_intent.action_type,
+                actor_player_id=action_intent.player_id,
+                actor_entity_id=action_intent.actor_id,
+                outcome_type=f"operation_{action_intent.operation_name}_played",
+                from_zone=zone,
+                to_zone=zone,
+            )
+        ]
         updated_match_state, events = self._history_manager.append_events(updated_match_state, events)
         return ActionExecutionResult(
             is_valid=True,

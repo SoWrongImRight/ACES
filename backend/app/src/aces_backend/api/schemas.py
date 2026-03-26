@@ -117,6 +117,10 @@ class ActionIntentRequest(BaseModel):
         default_factory=list,
         description="Optional typed targets for validation.",
     )
+    operation_name: str = Field(
+        default="",
+        description="Operation name for play_operation actions.",
+    )
 
 
 class ActionValidationResponse(BaseModel):
@@ -163,11 +167,19 @@ class AttackAircraftActionRequest(BaseModel):
     target: TargetReferenceRequest = Field(..., description="Typed target for this attack.")
 
 
+class PlayOperationActionRequest(BaseModel):
+    action_type: Literal["play_operation"]
+    player_id: str = Field(..., description="Player playing the operation.")
+    operation_name: str = Field(..., description="Name of the operation to play.")
+    aircraft_id: str = Field(..., description="Target aircraft for the operation.")
+
+
 ActionExecutionRequest = Annotated[
     LaunchAircraftActionRequest
     | RefitAircraftActionRequest
     | ReturnToRunwayActionRequest
-    | AttackAircraftActionRequest,
+    | AttackAircraftActionRequest
+    | PlayOperationActionRequest,
     Discriminator("action_type"),
 ]
 

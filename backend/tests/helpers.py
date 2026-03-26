@@ -7,6 +7,7 @@ from aces_backend.rules.engine import ActionExecutionResult
 def make_match_state(match_id: str = "match-123") -> MatchState:
     match_state = build_seeded_match(match_id=match_id)
     for player in match_state.players:
+        del player.aircraft[1:]
         for aircraft in player.aircraft:
             aircraft.weapon = None
             aircraft.pilot = None

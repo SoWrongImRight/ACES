@@ -18,6 +18,7 @@ from aces_backend.api.schemas import (
     MatchSummaryResponse,
     PilotStateResponse,
     PlayerStateResponse,
+    PlayOperationActionRequest,
     RunwayStateResponse,
     TargetReferenceRequest,
     WeaponStateResponse,
@@ -225,6 +226,7 @@ def preview_action(
                 )
                 for target in request.selected_targets
             ],
+            operation_name=request.operation_name,
         ),
     )
     return ActionValidationResponse(
@@ -267,6 +269,13 @@ def execute_action(
                     target_id=request.target.target_id,
                 )
             ],
+        )
+    elif isinstance(request, PlayOperationActionRequest):
+        action_intent = ActionIntent(
+            action_type=request.action_type,
+            actor_id=request.aircraft_id,
+            player_id=request.player_id,
+            operation_name=request.operation_name,
         )
     else:
         action_intent = ActionIntent(

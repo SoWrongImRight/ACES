@@ -76,6 +76,43 @@ class MatchFlow:
 class MatchStateUpdater:
     """Applies deterministic state transitions after rules validation succeeds."""
 
+    def restore_aircraft_fuel(
+        self,
+        match_state: MatchState,
+        player_id: str,
+        aircraft_id: str,
+        amount: int,
+    ) -> MatchState:
+        updated_players: list[PlayerState] = []
+        for player in match_state.players:
+            if player.player_id != player_id:
+                updated_players.append(player)
+                continue
+            updated_players.append(
+                replace(
+                    player,
+                    aircraft=[
+                        self._restore_fuel_if_matching(aircraft, aircraft_id, amount)
+                        for aircraft in player.aircraft
+                    ],
+                )
+            )
+        return replace(match_state, players=updated_players)
+
+    def decrement_cp(
+        self,
+        match_state: MatchState,
+        player_id: str,
+        amount: int,
+    ) -> MatchState:
+        updated_players: list[PlayerState] = []
+        for player in match_state.players:
+            if player.player_id != player_id:
+                updated_players.append(player)
+                continue
+            updated_players.append(replace(player, command_points=player.command_points - amount))
+        return replace(match_state, players=updated_players)
+
     def launch_aircraft(
         self,
         match_state: MatchState,
@@ -214,6 +251,16 @@ class MatchStateUpdater:
             )
 
         return replace(updated_match_state, players=updated_players)
+
+    def _restore_fuel_if_matching(
+        self,
+        aircraft: AircraftState,
+        aircraft_id: str,
+        amount: int,
+    ) -> AircraftState:
+        if aircraft.aircraft_id != aircraft_id:
+            return aircraft
+        return replace(aircraft, fuel=min(aircraft.fuel + amount, aircraft.max_fuel))
 
     def _launch_if_matching(
         self,
