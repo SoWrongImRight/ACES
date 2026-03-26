@@ -11,8 +11,8 @@ class MatchRepository:
     def list_matches(self) -> list[MatchState]:
         return list(self._matches.values())
 
-    def create_match(self) -> MatchState:
-        match_state = build_seeded_match()
+    def create_match(self, cp_per_turn: int = 2) -> MatchState:
+        match_state = build_seeded_match(cp_per_turn=cp_per_turn)
         self._matches[match_state.match_id] = match_state
         return match_state
 

@@ -22,6 +22,9 @@ class PhaseAdvanceValidationResult:
 class MatchFlow:
     """Deterministic match-flow helper for phase progression."""
 
+    def __init__(self, cp_per_turn: int = 2) -> None:
+        self._cp_per_turn = cp_per_turn
+
     def validate_phase_advance(
         self,
         match_state: MatchState,
@@ -51,6 +54,11 @@ class MatchFlow:
         updated_players = [
             replace(
                 player,
+                command_points=(
+                    self._cp_per_turn
+                    if player.player_id == match_state.active_player_id
+                    else player.command_points
+                ),
                 aircraft=[
                     replace(
                         aircraft,

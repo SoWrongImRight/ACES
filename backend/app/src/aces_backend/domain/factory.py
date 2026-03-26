@@ -10,7 +10,7 @@ from aces_backend.domain.models import (
 )
 
 
-def build_seeded_match(match_id: str | None = None) -> MatchState:
+def build_seeded_match(match_id: str | None = None, cp_per_turn: int = 2) -> MatchState:
     resolved_match_id = match_id or f"match-{uuid4().hex[:8]}"
     return MatchState(
         match_id=resolved_match_id,
@@ -22,7 +22,7 @@ def build_seeded_match(match_id: str | None = None) -> MatchState:
                 player_id="player-1",
                 display_name="Player One",
                 runway=RunwayState(),
-                command_points=2,
+                command_points=cp_per_turn,
                 aircraft=[
                     AircraftState(
                         aircraft_id="aircraft-alpha",
@@ -41,7 +41,7 @@ def build_seeded_match(match_id: str | None = None) -> MatchState:
                 player_id="player-2",
                 display_name="Player Two",
                 runway=RunwayState(),
-                command_points=2,
+                command_points=cp_per_turn,
                 aircraft=[
                     AircraftState(
                         aircraft_id="aircraft-bravo",

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from aces_backend.api.dependencies import get_match_repository, get_rules_engine
+from aces_backend.api.dependencies import get_match_repository, get_rules_engine, get_settings
+from aces_backend.config import GameSettings
 from aces_backend.api.schemas import (
     ActionExecutionRequest,
     AircraftStateResponse,
@@ -151,8 +152,9 @@ def list_matches(
 )
 def create_match(
     match_repository: MatchRepository = Depends(get_match_repository),
+    settings: GameSettings = Depends(get_settings),
 ) -> CreateMatchResponse:
-    match_state = match_repository.create_match()
+    match_state = match_repository.create_match(cp_per_turn=settings.cp_per_turn)
     return CreateMatchResponse(
         match_id=match_state.match_id,
         match_state=to_match_response(match_state),
@@ -176,16 +178,18 @@ def advance_phase(
     match_id: str,
     request: AdvancePhaseRequest,
     match_repository: MatchRepository = Depends(get_match_repository),
+    settings: GameSettings = Depends(get_settings),
 ) -> AdvancePhaseResponse:
     match_state = get_existing_match(match_id, match_repository)
-    validation = MatchFlow().validate_phase_advance(match_state, request.player_id)
+    match_flow = MatchFlow(cp_per_turn=settings.cp_per_turn)
+    validation = match_flow.validate_phase_advance(match_state, request.player_id)
     if not validation.is_valid:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=validation.reason,
         )
 
-    updated_match_state = MatchFlow().advance_phase(match_state)
+    updated_match_state = match_flow.advance_phase(match_state)
     match_repository.save_match(updated_match_state)
     return AdvancePhaseResponse(status="advanced", match_state=to_match_response(updated_match_state))
 
