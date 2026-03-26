@@ -57,30 +57,35 @@ weapons:
     cp_cost: 1
     attack_bonus: 1
     damage: 2
+    tags: [cannon]
 
   - id: sidewinder-missile
     name: Sidewinder Missile
     cp_cost: 1
     attack_bonus: 2
     damage: 3
+    tags: [missile]
 
   - id: heavy-cannon
     name: Heavy Cannon
     cp_cost: 1
     attack_bonus: 0
     damage: 3
+    tags: [cannon]
 
   - id: long-range-missile
     name: Long Range Missile
     cp_cost: 1
     attack_bonus: 1
     damage: 4
+    tags: [missile]
 
   - id: rocket-pod
     name: Rocket Pod
     cp_cost: 1
     attack_bonus: 1
     damage: 2
+    tags: [rocket]
 
 pilots:
   - id: maverick

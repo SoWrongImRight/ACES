@@ -53,6 +53,7 @@ def to_aircraft_response(aircraft_state: AircraftState) -> AircraftStateResponse
                 name=aircraft_state.weapon.name,
                 attack_bonus=aircraft_state.weapon.attack_bonus,
                 damage=aircraft_state.weapon.damage,
+                tags=aircraft_state.weapon.tags,
                 exhausted=aircraft_state.weapon.exhausted,
             )
             if aircraft_state.weapon is not None

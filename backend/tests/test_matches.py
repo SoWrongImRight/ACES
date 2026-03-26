@@ -112,6 +112,7 @@ def test_get_match_serializes_attachment_state_when_present(client) -> None:
         "name": "Cannons",
         "attack_bonus": 2,
         "damage": 1,
+        "tags": [],
         "exhausted": True,
     }
     assert aircraft["pilot"] == {
@@ -1695,6 +1696,44 @@ def test_exhausted_aircraft_cannot_be_targeted(client) -> None:
     payload = response.json()
     assert payload["is_valid"] is False
     assert "aircraft-bravo" not in payload["legal_target_ids"]
+
+
+# --- Weapon tags ---
+
+
+def test_weapon_tags_are_exposed_in_match_state(client) -> None:
+    match_state = make_match_state()
+    match_state.players[0].aircraft[0].weapon = WeaponState(
+        weapon_id="weapon-1",
+        name="Sidewinder Missile",
+        attack_bonus=2,
+        damage=3,
+        tags=["missile"],
+    )
+    get_match_repository().save_match(match_state)
+
+    response = client.get("/matches/match-123")
+
+    assert response.status_code == 200
+    weapon = response.json()["players"][0]["aircraft"][0]["weapon"]
+    assert weapon["tags"] == ["missile"]
+
+
+def test_weapon_tags_empty_by_default_in_match_state(client) -> None:
+    match_state = make_match_state()
+    match_state.players[0].aircraft[0].weapon = WeaponState(
+        weapon_id="weapon-1",
+        name="Generic Gun",
+        attack_bonus=1,
+        damage=2,
+    )
+    get_match_repository().save_match(match_state)
+
+    response = client.get("/matches/match-123")
+
+    assert response.status_code == 200
+    weapon = response.json()["players"][0]["aircraft"][0]["weapon"]
+    assert weapon["tags"] == []
 
 
 # --- Variable weapon damage ---

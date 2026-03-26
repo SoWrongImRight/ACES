@@ -81,6 +81,16 @@ def test_find_weapon_returns_correct_stats() -> None:
     assert card.cp_cost == 1
     assert card.attack_bonus == 2
     assert card.damage == 3
+    assert "missile" in card.tags
+
+
+def test_weapon_tags_by_type() -> None:
+    loader = make_loader()
+    assert "cannon" in loader.find_weapon("20mm-cannon").tags
+    assert "cannon" in loader.find_weapon("heavy-cannon").tags
+    assert "missile" in loader.find_weapon("sidewinder-missile").tags
+    assert "missile" in loader.find_weapon("long-range-missile").tags
+    assert "rocket" in loader.find_weapon("rocket-pod").tags
 
 
 def test_all_cards_have_cp_cost() -> None:

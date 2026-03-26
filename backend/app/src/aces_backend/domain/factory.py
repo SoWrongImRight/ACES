@@ -164,6 +164,7 @@ def _build_weapon_state(
         name=card.name,
         attack_bonus=card.attack_bonus,
         damage=card.damage,
+        tags=card.tags,
     )
 
 
@@ -216,6 +217,7 @@ def _build_hardcoded(
                             name="20mm Cannon",
                             attack_bonus=1,
                             damage=2,
+                            tags=["cannon"],
                         ),
                         pilot=PilotState(
                             pilot_id="pilot-alpha",
@@ -257,6 +259,7 @@ def _build_hardcoded(
                             name="Sidewinder Missile",
                             attack_bonus=2,
                             damage=3,
+                            tags=["missile"],
                         ),
                     ),
                     AircraftState(
