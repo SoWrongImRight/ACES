@@ -167,6 +167,23 @@ def test_fuel_bonus_pilot_increases_aircraft_max_fuel_and_starting_fuel() -> Non
     assert aircraft.fuel == 5
 
 
+def test_structure_bonus_pilot_increases_aircraft_structure_rating() -> None:
+    from aces_backend.domain.factory import _aircraft_from_card
+    from aces_backend.domain.models import PilotState
+
+    loader = make_loader()
+    aircraft_card = loader.find_aircraft("eagle-three")  # structure_rating=3
+    pilot_state = PilotState(pilot_id="test-bandit", name="Bandit", structure_bonus=1)
+    aircraft = _aircraft_from_card(
+        instance_id="test-aircraft",
+        owner_player_id="player-1",
+        card=aircraft_card,
+        weapon=None,
+        pilot=pilot_state,
+    )
+    assert aircraft.structure_rating == 4
+
+
 def test_no_fuel_bonus_leaves_aircraft_fuel_unchanged() -> None:
     from aces_backend.domain.factory import _aircraft_from_card
     from aces_backend.domain.models import PilotState
