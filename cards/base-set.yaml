@@ -1,0 +1,48 @@
+id: base-set
+name: Base Set
+version: "1.0"
+
+aircraft:
+  - id: falcon-one
+    name: Falcon One
+    attack: 3
+    evasion: 4
+    structure_rating: 4
+    max_fuel: 6
+
+  - id: eagle-three
+    name: Eagle Three
+    attack: 2
+    evasion: 4
+    structure_rating: 3
+    max_fuel: 4
+
+  - id: viper-two
+    name: Viper Two
+    attack: 2
+    evasion: 4
+    structure_rating: 4
+    max_fuel: 5
+
+  - id: hawk-four
+    name: Hawk Four
+    attack: 3
+    evasion: 4
+    structure_rating: 3
+    max_fuel: 4
+
+weapons:
+  - id: 20mm-cannon
+    name: 20mm Cannon
+    attack_bonus: 1
+    damage: 2
+
+  - id: sidewinder-missile
+    name: Sidewinder Missile
+    attack_bonus: 2
+    damage: 3
+
+pilots:
+  - id: maverick
+    name: Maverick
+    attack_bonus: 1

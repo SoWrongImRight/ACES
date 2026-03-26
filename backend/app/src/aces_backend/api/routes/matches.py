@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from aces_backend.api.dependencies import get_match_repository, get_rules_engine, get_settings
+from aces_backend.api.dependencies import get_card_loader, get_match_repository, get_rules_engine, get_settings
+from aces_backend.cards.loader import CardLoader
 from aces_backend.config import GameSettings
 from aces_backend.api.schemas import (
     ActionExecutionRequest,
@@ -156,10 +157,12 @@ def list_matches(
 def create_match(
     match_repository: MatchRepository = Depends(get_match_repository),
     settings: GameSettings = Depends(get_settings),
+    card_loader: CardLoader = Depends(get_card_loader),
 ) -> CreateMatchResponse:
     match_state = match_repository.create_match(
         cp_per_turn=settings.cp_per_turn,
         runway_health=settings.runway_health,
+        card_loader=card_loader,
     )
     return CreateMatchResponse(
         match_id=match_state.match_id,
