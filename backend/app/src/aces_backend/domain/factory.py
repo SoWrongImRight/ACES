@@ -135,6 +135,7 @@ def _aircraft_from_card(
 ) -> AircraftState:
     fuel_bonus = pilot.fuel_bonus if pilot is not None else 0
     structure_bonus = pilot.structure_bonus if pilot is not None else 0
+    evasion_bonus = pilot.evasion_bonus if pilot is not None else 0
     effective_max_fuel = card.max_fuel + fuel_bonus
     return AircraftState(
         aircraft_id=instance_id,
@@ -144,7 +145,7 @@ def _aircraft_from_card(
         max_fuel=effective_max_fuel,
         structure_rating=card.structure_rating + structure_bonus,
         attack=card.attack,
-        evasion=card.evasion,
+        evasion=card.evasion + evasion_bonus,
         zone=Zone.RUNWAY,
         weapon=weapon,
         pilot=pilot,
