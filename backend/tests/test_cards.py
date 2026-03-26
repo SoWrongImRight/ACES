@@ -145,6 +145,46 @@ def test_find_hazard_returns_none_for_unknown_id() -> None:
     assert make_loader().find_hazard("does-not-exist") is None
 
 
+def test_fuel_bonus_pilot_increases_aircraft_max_fuel_and_starting_fuel() -> None:
+    from aces_backend.domain.factory import _aircraft_from_card
+    from aces_backend.domain.models import PilotState
+
+    loader = make_loader()
+    aircraft_card = loader.find_aircraft("eagle-three")  # max_fuel=4
+    pilot_state = PilotState(
+        pilot_id="test-viper",
+        name="Viper",
+        fuel_bonus=1,
+    )
+    aircraft = _aircraft_from_card(
+        instance_id="test-aircraft",
+        owner_player_id="player-1",
+        card=aircraft_card,
+        weapon=None,
+        pilot=pilot_state,
+    )
+    assert aircraft.max_fuel == 5
+    assert aircraft.fuel == 5
+
+
+def test_no_fuel_bonus_leaves_aircraft_fuel_unchanged() -> None:
+    from aces_backend.domain.factory import _aircraft_from_card
+    from aces_backend.domain.models import PilotState
+
+    loader = make_loader()
+    aircraft_card = loader.find_aircraft("eagle-three")  # max_fuel=4
+    pilot_state = PilotState(pilot_id="test-maverick", name="Maverick", attack_bonus=1)
+    aircraft = _aircraft_from_card(
+        instance_id="test-aircraft",
+        owner_player_id="player-1",
+        card=aircraft_card,
+        weapon=None,
+        pilot=pilot_state,
+    )
+    assert aircraft.max_fuel == 4
+    assert aircraft.fuel == 4
+
+
 def test_card_loader_is_used_when_creating_match_via_api(client) -> None:
     """Match created via POST /matches should be built from card definitions."""
     response = client.post("/matches")
