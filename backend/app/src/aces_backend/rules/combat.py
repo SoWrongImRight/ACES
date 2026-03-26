@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import StrEnum
+import random
 from typing import Any
 
 from aces_backend.domain.models import (
@@ -24,6 +25,7 @@ class CombatInput:
     resolved_attack: int
     resolved_evasion: int | None
     weapon_damage: int = 1
+    roll: int = 0
 
 
 @dataclass(slots=True)
@@ -66,6 +68,7 @@ class CombatInputBuilder:
         attacking_aircraft: AircraftState | None,
         target_aircraft: AircraftState | None,
         extra_modifiers: list[CombatStatModifier] | None = None,
+        die_roll: int | None = None,
     ) -> CombatInput:
         base_attack = attacking_aircraft.attack if attacking_aircraft is not None else 0
         base_evasion = (
@@ -93,6 +96,7 @@ class CombatInputBuilder:
             and not attacking_aircraft.weapon.exhausted
             else 1
         )
+        roll = die_roll if die_roll is not None else random.randint(1, 6)
         return CombatInput(
             action_type=action_type,
             actor_player_id=actor_player_id,
@@ -104,6 +108,7 @@ class CombatInputBuilder:
             resolved_attack=resolved_attack,
             resolved_evasion=resolved_evasion,
             weapon_damage=weapon_damage,
+            roll=roll,
         )
 
     def _gather_attack_modifiers(
@@ -215,6 +220,7 @@ class CombatResult:
     target_type: AttackTargetType
     target_id: str
     outcome_type: str
+    roll: int = 0
     structure_rating_delta: int = 0
     runway_damage: int = 0
     destroyed_entity_id: str | None = None
@@ -234,6 +240,7 @@ def build_attack_combat_input(
     target_id: str,
     attacking_aircraft: AircraftState | None,
     target_aircraft: AircraftState | None,
+    die_roll: int | None = None,
 ) -> CombatInput:
     return CombatInputBuilder().build_attack_input(
         action_type=action_type,
@@ -243,6 +250,7 @@ def build_attack_combat_input(
         target_id=target_id,
         attacking_aircraft=attacking_aircraft,
         target_aircraft=target_aircraft,
+        die_roll=die_roll,
     )
 
 
@@ -292,6 +300,7 @@ def resolve_attack_combat_result(
             if hit
             else "miss"
         ),
+        roll=combat_input.roll,
         structure_rating_delta=structure_rating_delta,
         runway_damage=runway_damage,
         destroyed_entity_id=destroyed_entity_id,
@@ -314,6 +323,7 @@ def apply_terminal_outcome_to_combat_result(
         target_type=combat_result.target_type,
         target_id=combat_result.target_id,
         outcome_type=combat_result.outcome_type,
+        roll=combat_result.roll,
         structure_rating_delta=combat_result.structure_rating_delta,
         runway_damage=combat_result.runway_damage,
         destroyed_entity_id=combat_result.destroyed_entity_id,
@@ -383,6 +393,7 @@ def combat_result_to_events(
                 and combat_result.runway_damage > 0
                 else None
             ),
+            roll=combat_result.roll,
         )
     ]
 
@@ -425,7 +436,8 @@ def _resolve_attack_hit(
     combat_input: CombatInput,
     target_aircraft: AircraftState | None,
 ) -> bool:
-    if combat_input.resolved_attack <= 0:
+    total_attack = combat_input.resolved_attack + combat_input.roll
+    if total_attack <= 0:
         return False
 
     if combat_input.target_type == AttackTargetType.RUNWAY:
@@ -435,7 +447,7 @@ def _resolve_attack_hit(
         target_aircraft is not None
         and not target_aircraft.destroyed
         and combat_input.resolved_evasion is not None
-        and combat_input.resolved_attack >= combat_input.resolved_evasion
+        and total_attack >= combat_input.resolved_evasion
     )
 
 

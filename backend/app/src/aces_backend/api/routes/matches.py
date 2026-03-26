@@ -95,6 +95,7 @@ def to_match_event_response(event) -> MatchEventResponse:
         to_zone=event.to_zone,
         sr_delta=event.sr_delta,
         runway_damage=event.runway_damage,
+        roll=event.roll,
         destroyed_entity_id=event.destroyed_entity_id,
         winner_player_id=event.winner_player_id,
     )
@@ -155,7 +156,10 @@ def create_match(
     match_repository: MatchRepository = Depends(get_match_repository),
     settings: GameSettings = Depends(get_settings),
 ) -> CreateMatchResponse:
-    match_state = match_repository.create_match(cp_per_turn=settings.cp_per_turn)
+    match_state = match_repository.create_match(
+        cp_per_turn=settings.cp_per_turn,
+        runway_health=settings.runway_health,
+    )
     return CreateMatchResponse(
         match_id=match_state.match_id,
         match_state=to_match_response(match_state),

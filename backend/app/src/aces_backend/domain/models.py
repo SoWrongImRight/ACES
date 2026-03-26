@@ -62,6 +62,7 @@ class MatchEvent:
     to_zone: Zone | None = None
     sr_delta: int | None = None
     runway_damage: int | None = None
+    roll: int | None = None
     destroyed_entity_id: str | None = None
     winner_player_id: str | None = None
 

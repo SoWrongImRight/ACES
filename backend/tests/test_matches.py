@@ -11,6 +11,11 @@ def create_match(client) -> dict:
     return response.json()
 
 
+def strip_roll(events: list[dict]) -> list[dict]:
+    """Remove the non-deterministic roll field so event dicts can be compared exactly."""
+    return [{k: v for k, v in event.items() if k != "roll"} for event in events]
+
+
 def test_list_matches_is_empty_before_creation(client) -> None:
     response = client.get("/matches")
 
@@ -122,7 +127,7 @@ def test_execute_attack_aircraft_succeeds_in_air_phase(client) -> None:
     payload = response.json()
 
     assert payload["status"] == "resolved"
-    assert payload["emitted_events"] == [
+    assert strip_roll(payload["emitted_events"]) == [
         {
             "sequence": 1,
             "action_type": "attack_aircraft",
@@ -136,6 +141,7 @@ def test_execute_attack_aircraft_succeeds_in_air_phase(client) -> None:
             "sr_delta": -1,
         }
     ]
+    assert payload["emitted_events"][0]["roll"] in range(1, 7)
     assert payload["action_result"] == {
         "aircraft_id": "aircraft-alpha",
         "action_type": "attack_aircraft",
@@ -151,7 +157,7 @@ def test_execute_attack_aircraft_succeeds_in_air_phase(client) -> None:
         "target_destroyed": False,
     }
     assert payload["match_state"]["players"][0]["aircraft"][0]["has_attacked_this_phase"] is True
-    assert payload["match_state"]["event_history"] == payload["emitted_events"]
+    assert strip_roll(payload["match_state"]["event_history"]) == strip_roll(payload["emitted_events"])
 
 
 def test_execute_attack_aircraft_can_miss(client) -> None:
@@ -243,7 +249,7 @@ def test_execute_attack_aircraft_destroys_target_and_sets_terminal_state(client)
     assert payload["match_state"]["is_terminal"] is True
     assert payload["match_state"]["winner_player_id"] == "player-1"
     assert payload["match_state"]["loser_player_id"] == "player-2"
-    assert payload["emitted_events"] == [
+    assert strip_roll(payload["emitted_events"]) == [
         {
             "sequence": 1,
             "action_type": "attack_aircraft",
@@ -1101,7 +1107,7 @@ def test_execute_attack_aircraft_can_target_enemy_runway(client) -> None:
     assert payload["action_result"]["target_destroyed"] is False
     assert payload["match_state"]["players"][1]["runway"]["health"] == 19
     assert payload["match_state"]["players"][0]["aircraft"][0]["has_attacked_this_phase"] is True
-    assert payload["emitted_events"] == [
+    assert strip_roll(payload["emitted_events"]) == [
         {
             "sequence": 1,
             "action_type": "attack_aircraft",
@@ -1165,7 +1171,7 @@ def test_execute_attack_aircraft_destroying_runway_sets_terminal_state(client) -
     assert payload["match_state"]["is_terminal"] is True
     assert payload["match_state"]["winner_player_id"] == "player-1"
     assert payload["match_state"]["loser_player_id"] == "player-2"
-    assert payload["emitted_events"] == [
+    assert strip_roll(payload["emitted_events"]) == [
         {
             "sequence": 1,
             "action_type": "attack_aircraft",
@@ -1661,6 +1667,29 @@ def test_weapon_damage_field_is_exposed_in_match_state(client) -> None:
     assert response.status_code == 200
     weapon = response.json()["players"][0]["aircraft"][0]["weapon"]
     assert weapon["damage"] == 3
+
+
+def test_attack_event_includes_die_roll_in_valid_range(client) -> None:
+    match_state = make_match_state()
+    match_state.phase = Phase.AIR
+    match_state.players[0].aircraft[0].zone = Zone.AIR
+    match_state.players[1].aircraft[0].zone = Zone.AIR
+    get_match_repository().save_match(match_state)
+
+    response = client.post(
+        "/matches/match-123/actions",
+        json={
+            "action_type": "attack_aircraft",
+            "actor_player_id": "player-1",
+            "attacking_aircraft_id": "aircraft-alpha",
+            "target": {"target_type": "aircraft", "target_id": "aircraft-bravo"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "resolved"
+    assert payload["emitted_events"][0]["roll"] in range(1, 7)
 
 
 def test_weapon_damage_applied_to_attack_resolution(client) -> None:

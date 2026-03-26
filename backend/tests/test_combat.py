@@ -173,6 +173,7 @@ def test_resolver_behavior_stays_aligned_when_fed_modified_combat_input() -> Non
     attacking_aircraft = match_state.players[0].aircraft[0]
     target_aircraft = match_state.players[1].aircraft[0]
 
+    target_aircraft.evasion = 5
     combat_input = CombatInputBuilder().build_attack_input(
         action_type="attack_aircraft",
         actor_player_id="player-1",
@@ -188,6 +189,7 @@ def test_resolver_behavior_stays_aligned_when_fed_modified_combat_input() -> Non
                 attack_delta=-1,
             )
         ],
+        die_roll=1,
     )
     combat_result = resolve_attack_combat_result(
         combat_input=combat_input,
@@ -197,7 +199,7 @@ def test_resolver_behavior_stays_aligned_when_fed_modified_combat_input() -> Non
     )
 
     assert combat_input.resolved_attack == 2
-    assert combat_input.resolved_evasion == 3
+    assert combat_input.resolved_evasion == 5
     assert_combat_result_snapshot(
         combat_result,
         expected_outcome_type="miss",
@@ -308,7 +310,7 @@ def test_aircraft_with_no_weapon_behaves_as_before() -> None:
     match_state = make_match_state()
     attacking_aircraft = match_state.players[0].aircraft[0]
     target_aircraft = match_state.players[1].aircraft[0]
-    target_aircraft.evasion = 4
+    target_aircraft.evasion = 5
 
     combat_input = build_attack_combat_input(
         action_type="attack_aircraft",
@@ -318,6 +320,7 @@ def test_aircraft_with_no_weapon_behaves_as_before() -> None:
         target_id="aircraft-bravo",
         attacking_aircraft=attacking_aircraft,
         target_aircraft=target_aircraft,
+        die_roll=1,
     )
     combat_result = resolve_attack_combat_result(
         combat_input=combat_input,
@@ -430,7 +433,7 @@ def test_exhausted_weapon_does_not_contribute_attack_bonus() -> None:
         attack_bonus=2,
         exhausted=True,
     )
-    target_aircraft.evasion = 4
+    target_aircraft.evasion = 5
 
     combat_input = build_attack_combat_input(
         action_type="attack_aircraft",
@@ -440,6 +443,7 @@ def test_exhausted_weapon_does_not_contribute_attack_bonus() -> None:
         target_id="aircraft-bravo",
         attacking_aircraft=attacking_aircraft,
         target_aircraft=target_aircraft,
+        die_roll=1,
     )
     combat_result = resolve_attack_combat_result(
         combat_input=combat_input,

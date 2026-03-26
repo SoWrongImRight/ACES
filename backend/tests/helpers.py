@@ -5,7 +5,12 @@ from aces_backend.rules.engine import ActionExecutionResult
 
 
 def make_match_state(match_id: str = "match-123") -> MatchState:
-    return build_seeded_match(match_id=match_id)
+    match_state = build_seeded_match(match_id=match_id)
+    for player in match_state.players:
+        for aircraft in player.aircraft:
+            aircraft.weapon = None
+            aircraft.pilot = None
+    return match_state
 
 
 def assert_combat_result_snapshot(

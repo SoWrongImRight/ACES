@@ -4,13 +4,19 @@ from aces_backend.domain.models import (
     AircraftState,
     MatchState,
     Phase,
+    PilotState,
     PlayerState,
     RunwayState,
+    WeaponState,
     Zone,
 )
 
 
-def build_seeded_match(match_id: str | None = None, cp_per_turn: int = 2) -> MatchState:
+def build_seeded_match(
+    match_id: str | None = None,
+    cp_per_turn: int = 2,
+    runway_health: int = 20,
+) -> MatchState:
     resolved_match_id = match_id or f"match-{uuid4().hex[:8]}"
     return MatchState(
         match_id=resolved_match_id,
@@ -21,7 +27,7 @@ def build_seeded_match(match_id: str | None = None, cp_per_turn: int = 2) -> Mat
             PlayerState(
                 player_id="player-1",
                 display_name="Player One",
-                runway=RunwayState(),
+                runway=RunwayState(health=runway_health, max_health=runway_health),
                 command_points=cp_per_turn,
                 aircraft=[
                     AircraftState(
@@ -34,13 +40,24 @@ def build_seeded_match(match_id: str | None = None, cp_per_turn: int = 2) -> Mat
                         attack=3,
                         evasion=2,
                         zone=Zone.RUNWAY,
+                        weapon=WeaponState(
+                            weapon_id="weapon-alpha-cannon",
+                            name="20mm Cannon",
+                            attack_bonus=1,
+                            damage=2,
+                        ),
+                        pilot=PilotState(
+                            pilot_id="pilot-alpha",
+                            name="Maverick",
+                            attack_bonus=1,
+                        ),
                     )
                 ],
             ),
             PlayerState(
                 player_id="player-2",
                 display_name="Player Two",
-                runway=RunwayState(),
+                runway=RunwayState(health=runway_health, max_health=runway_health),
                 command_points=cp_per_turn,
                 aircraft=[
                     AircraftState(
@@ -53,6 +70,12 @@ def build_seeded_match(match_id: str | None = None, cp_per_turn: int = 2) -> Mat
                         attack=2,
                         evasion=3,
                         zone=Zone.RUNWAY,
+                        weapon=WeaponState(
+                            weapon_id="weapon-bravo-missile",
+                            name="Sidewinder Missile",
+                            attack_bonus=2,
+                            damage=3,
+                        ),
                     )
                 ],
             ),
