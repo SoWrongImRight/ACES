@@ -174,6 +174,9 @@ def _build_pilot_state(
         pilot_id=slot["instance_id"],
         name=card.name,
         attack_bonus=card.attack_bonus,
+        evasion_bonus=card.evasion_bonus,
+        fuel_bonus=card.fuel_bonus,
+        structure_bonus=card.structure_bonus,
     )
 
 

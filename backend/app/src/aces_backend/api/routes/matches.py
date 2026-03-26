@@ -63,6 +63,9 @@ def to_aircraft_response(aircraft_state: AircraftState) -> AircraftStateResponse
                 pilot_id=aircraft_state.pilot.pilot_id,
                 name=aircraft_state.pilot.name,
                 attack_bonus=aircraft_state.pilot.attack_bonus,
+                evasion_bonus=aircraft_state.pilot.evasion_bonus,
+                fuel_bonus=aircraft_state.pilot.fuel_bonus,
+                structure_bonus=aircraft_state.pilot.structure_bonus,
             )
             if aircraft_state.pilot is not None
             else None

@@ -44,6 +44,9 @@ class PilotStateResponse(BaseModel):
     pilot_id: str
     name: str
     attack_bonus: int
+    evasion_bonus: int = 0
+    fuel_bonus: int = 0
+    structure_bonus: int = 0
 
 
 class PlayerStateResponse(BaseModel):

@@ -47,6 +47,9 @@ class PilotState:
     pilot_id: str
     name: str
     attack_bonus: int = 0
+    evasion_bonus: int = 0
+    fuel_bonus: int = 0
+    structure_bonus: int = 0
 
 
 @dataclass(slots=True)

@@ -118,6 +118,9 @@ def test_get_match_serializes_attachment_state_when_present(client) -> None:
         "pilot_id": "pilot-1",
         "name": "Ace",
         "attack_bonus": 1,
+        "evasion_bonus": 0,
+        "fuel_bonus": 0,
+        "structure_bonus": 0,
     }
 
 
