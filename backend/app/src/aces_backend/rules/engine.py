@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from aces_backend.domain.models import AttackTargetType, MatchEvent, MatchState, Phase, PlayerState, Zone
+from aces_backend.domain.models import ActiveBuff, AttackTargetType, MatchEvent, MatchState, Phase, PlayerState, Zone
 from aces_backend.domain.services import (
     MatchHistoryManager,
     MatchOutcomeEvaluator,
@@ -9,7 +9,9 @@ from aces_backend.domain.services import (
 )
 from aces_backend.rules.combat import (
     build_attack_combat_input,
+    collect_tactic_modifiers,
     CombatResult,
+    CombatStatModifier,
     apply_terminal_outcome_to_combat_result,
     combat_result_to_action_resolution_fields,
     combat_result_to_events,
@@ -35,8 +37,21 @@ class ActionIntent:
 
 OPERATION_CP_COSTS: dict[str, int] = {
     "resupply": 1,
+    "target-lock": 1,
+    "afterburner": 1,
+    "full-send": 1,
 }
 RESUPPLY_FUEL_AMOUNT = 3
+
+# Tactic operations that apply a combat buff to a target aircraft.
+# attack_delta: added to resolved_attack when the aircraft is attacking.
+# evasion_delta: added to resolved_evasion when the aircraft is defending.
+# self_damage: damage dealt to the attacking aircraft after combat resolves (if hit).
+TACTIC_BUFF_DEFINITIONS: dict[str, dict] = {
+    "target-lock": {"attack_delta": 2, "evasion_delta": 0, "self_damage": 0},
+    "afterburner": {"attack_delta": 0, "evasion_delta": 2, "self_damage": 0},
+    "full-send": {"attack_delta": 3, "evasion_delta": 0, "self_damage": 1},
+}
 
 
 @dataclass(slots=True)
@@ -237,6 +252,11 @@ class RulesEngine:
             if target.target_type == AttackTargetType.RUNWAY
             else None
         )
+        tactic_modifiers: list[CombatStatModifier] = collect_tactic_modifiers(
+            attacker_id=action_intent.actor_id,
+            defender_id=target.target_id if target.target_type == AttackTargetType.AIRCRAFT else None,
+            active_buffs=match_state.active_buffs,
+        )
         combat_input = build_attack_combat_input(
             action_type=action_intent.action_type,
             actor_player_id=action_intent.player_id,
@@ -245,6 +265,7 @@ class RulesEngine:
             target_id=target.target_id,
             attacking_aircraft=attacking_aircraft,
             target_aircraft=target_aircraft,
+            extra_modifiers=tactic_modifiers,
             die_roll=self._die_roller() if self._die_roller is not None else None,
         )
         combat_result = resolve_attack_combat_result(
@@ -253,8 +274,17 @@ class RulesEngine:
             target_player=target_player,
             match_state=match_state,
         )
-        updated_match_state = self._state_updater.resolve_attack(
+        updated_match_state = self._state_updater.consume_buffs_for_aircraft(
             match_state=match_state,
+            aircraft_id=action_intent.actor_id,
+        )
+        if target.target_type == AttackTargetType.AIRCRAFT:
+            updated_match_state = self._state_updater.consume_buffs_for_aircraft(
+                match_state=updated_match_state,
+                aircraft_id=target.target_id,
+            )
+        updated_match_state = self._state_updater.resolve_attack(
+            match_state=updated_match_state,
             player_id=action_intent.player_id,
             attacking_aircraft_id=action_intent.actor_id,
             target_id=target.target_id,
@@ -262,6 +292,21 @@ class RulesEngine:
             structure_rating_delta=combat_result.structure_rating_delta,
             runway_damage=combat_result.runway_damage,
         )
+        # Apply full-send self-damage: if the attacker had a self_damage buff and the attack hit.
+        if combat_result.is_hit:
+            self_damage = sum(
+                b.self_damage for b in match_state.active_buffs
+                if b.aircraft_id == action_intent.actor_id and b.self_damage > 0
+            )
+            if self_damage > 0:
+                updated_match_state = self._state_updater.resolve_attack(
+                    match_state=updated_match_state,
+                    player_id=action_intent.player_id,
+                    attacking_aircraft_id=action_intent.actor_id,
+                    target_id=action_intent.actor_id,
+                    target_type=AttackTargetType.AIRCRAFT,
+                    structure_rating_delta=-self_damage,
+                )
         updated_target_aircraft = (
             updated_match_state.get_aircraft(target.target_id)
             if target.target_type == AttackTargetType.AIRCRAFT
@@ -499,22 +544,23 @@ class RulesEngine:
                 legal_target_ids=[],
             )
 
+        aircraft_state = self._find_aircraft(player_state, aircraft_id)
+        if aircraft_state is None:
+            return ActionValidationResult(
+                is_valid=False,
+                reason="Target aircraft must belong to the acting player.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+        if aircraft_state.destroyed:
+            return ActionValidationResult(
+                is_valid=False,
+                reason="Cannot target a destroyed aircraft.",
+                legal_actor_ids=[],
+                legal_target_ids=[],
+            )
+
         if operation_name == "resupply":
-            aircraft_state = self._find_aircraft(player_state, aircraft_id)
-            if aircraft_state is None:
-                return ActionValidationResult(
-                    is_valid=False,
-                    reason="Target aircraft must belong to the acting player.",
-                    legal_actor_ids=[],
-                    legal_target_ids=[],
-                )
-            if aircraft_state.destroyed:
-                return ActionValidationResult(
-                    is_valid=False,
-                    reason="Cannot resupply a destroyed aircraft.",
-                    legal_actor_ids=[],
-                    legal_target_ids=[],
-                )
             if aircraft_state.zone != Zone.RUNWAY:
                 return ActionValidationResult(
                     is_valid=False,
@@ -564,6 +610,17 @@ class RulesEngine:
                 aircraft_id=action_intent.actor_id,
                 amount=RESUPPLY_FUEL_AMOUNT,
             )
+        elif action_intent.operation_name in TACTIC_BUFF_DEFINITIONS:
+            defn = TACTIC_BUFF_DEFINITIONS[action_intent.operation_name]
+            buff = ActiveBuff(
+                tactic_id=action_intent.operation_name,
+                aircraft_id=action_intent.actor_id,
+                player_id=action_intent.player_id,
+                attack_delta=defn["attack_delta"],
+                evasion_delta=defn["evasion_delta"],
+                self_damage=defn["self_damage"],
+            )
+            updated_match_state = self._state_updater.add_active_buff(updated_match_state, buff)
 
         player_state = match_state.get_player(action_intent.player_id)
         aircraft_state = self._find_aircraft(player_state, action_intent.actor_id)

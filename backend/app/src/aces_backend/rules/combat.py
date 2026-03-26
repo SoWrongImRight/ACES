@@ -4,6 +4,7 @@ import random
 from typing import Any
 
 from aces_backend.domain.models import (
+    ActiveBuff,
     AircraftState,
     AttackTargetType,
     MatchEvent,
@@ -156,6 +157,37 @@ def order_combat_modifiers(
     )
 
 
+def collect_tactic_modifiers(
+    *,
+    attacker_id: str,
+    defender_id: str | None,
+    active_buffs: list[ActiveBuff],
+) -> list[CombatStatModifier]:
+    """Collect TEMPORARY_EFFECT modifiers from active tactic buffs for this combat.
+
+    Attacker buffs contribute attack_delta; defender buffs contribute evasion_delta.
+    """
+    modifiers: list[CombatStatModifier] = []
+    for buff in active_buffs:
+        if buff.aircraft_id == attacker_id and buff.attack_delta != 0:
+            modifiers.append(
+                CombatStatModifier(
+                    category=CombatModifierCategory.TEMPORARY_EFFECT,
+                    source=f"tactic:{buff.tactic_id}",
+                    attack_delta=buff.attack_delta,
+                )
+            )
+        if defender_id is not None and buff.aircraft_id == defender_id and buff.evasion_delta != 0:
+            modifiers.append(
+                CombatStatModifier(
+                    category=CombatModifierCategory.TEMPORARY_EFFECT,
+                    source=f"tactic:{buff.tactic_id}",
+                    evasion_delta=buff.evasion_delta,
+                )
+            )
+    return modifiers
+
+
 def collect_attachment_attack_modifiers(
     *,
     attacking_aircraft: AircraftState | None,
@@ -240,6 +272,7 @@ def build_attack_combat_input(
     target_id: str,
     attacking_aircraft: AircraftState | None,
     target_aircraft: AircraftState | None,
+    extra_modifiers: list[CombatStatModifier] | None = None,
     die_roll: int | None = None,
 ) -> CombatInput:
     return CombatInputBuilder().build_attack_input(
@@ -250,6 +283,7 @@ def build_attack_combat_input(
         target_id=target_id,
         attacking_aircraft=attacking_aircraft,
         target_aircraft=target_aircraft,
+        extra_modifiers=extra_modifiers,
         die_roll=die_roll,
     )
 

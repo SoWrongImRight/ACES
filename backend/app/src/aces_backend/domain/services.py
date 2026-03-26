@@ -1,6 +1,7 @@
 from dataclasses import dataclass, replace
 
 from aces_backend.domain.models import (
+    ActiveBuff,
     AircraftState,
     AttackTargetType,
     MatchEvent,
@@ -70,7 +71,7 @@ class MatchFlow:
             )
             for player in match_state.players
         ]
-        return replace(match_state, players=updated_players)
+        return replace(match_state, players=updated_players, active_buffs=[])
 
 
 class MatchStateUpdater:
@@ -112,6 +113,21 @@ class MatchStateUpdater:
                 continue
             updated_players.append(replace(player, command_points=player.command_points - amount))
         return replace(match_state, players=updated_players)
+
+    def add_active_buff(
+        self,
+        match_state: MatchState,
+        buff: ActiveBuff,
+    ) -> MatchState:
+        return replace(match_state, active_buffs=[*match_state.active_buffs, buff])
+
+    def consume_buffs_for_aircraft(
+        self,
+        match_state: MatchState,
+        aircraft_id: str,
+    ) -> MatchState:
+        remaining = [b for b in match_state.active_buffs if b.aircraft_id != aircraft_id]
+        return replace(match_state, active_buffs=remaining)
 
     def launch_aircraft(
         self,

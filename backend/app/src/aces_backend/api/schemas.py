@@ -59,6 +59,15 @@ class PlayerStateResponse(BaseModel):
     aircraft: list[AircraftStateResponse]
 
 
+class ActiveBuffResponse(BaseModel):
+    tactic_id: str
+    aircraft_id: str
+    player_id: str
+    attack_delta: int = 0
+    evasion_delta: int = 0
+    self_damage: int = 0
+
+
 class MatchEventResponse(BaseModel):
     sequence: int
     action_type: str
@@ -85,6 +94,7 @@ class MatchStateResponse(BaseModel):
     winner_player_id: str | None = None
     loser_player_id: str | None = None
     event_history: list[MatchEventResponse]
+    active_buffs: list[ActiveBuffResponse] = Field(default_factory=list)
     players: list[PlayerStateResponse]
 
 

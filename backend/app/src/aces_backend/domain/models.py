@@ -54,6 +54,16 @@ class PilotState:
 
 
 @dataclass(slots=True)
+class ActiveBuff:
+    tactic_id: str
+    aircraft_id: str
+    player_id: str
+    attack_delta: int = 0
+    evasion_delta: int = 0
+    self_damage: int = 0
+
+
+@dataclass(slots=True)
 class MatchEvent:
     sequence: int
     action_type: str
@@ -114,6 +124,7 @@ class MatchState:
     winner_player_id: str | None = None
     loser_player_id: str | None = None
     event_history: list[MatchEvent] = field(default_factory=list)
+    active_buffs: list[ActiveBuff] = field(default_factory=list)
     next_event_sequence: int = 1
 
     def get_player(self, player_id: str) -> PlayerState | None:
@@ -143,6 +154,7 @@ class MatchState:
                 winner_player_id=self.winner_player_id,
                 loser_player_id=self.loser_player_id,
                 event_history=self.event_history,
+                active_buffs=self.active_buffs,
                 next_event_sequence=self.next_event_sequence,
             )
 
@@ -160,5 +172,6 @@ class MatchState:
             winner_player_id=self.winner_player_id,
             loser_player_id=self.loser_player_id,
             event_history=self.event_history,
+            active_buffs=[],
             next_event_sequence=self.next_event_sequence,
         )

@@ -5,6 +5,7 @@ from aces_backend.cards.loader import CardLoader
 from aces_backend.config import GameSettings
 from aces_backend.api.schemas import (
     ActionExecutionRequest,
+    ActiveBuffResponse,
     AircraftStateResponse,
     ActionExecutionResponse,
     ActionIntentRequest,
@@ -117,6 +118,17 @@ def to_match_response(match_state: MatchState) -> MatchStateResponse:
         winner_player_id=match_state.winner_player_id,
         loser_player_id=match_state.loser_player_id,
         event_history=[to_match_event_response(event) for event in match_state.event_history],
+        active_buffs=[
+            ActiveBuffResponse(
+                tactic_id=buff.tactic_id,
+                aircraft_id=buff.aircraft_id,
+                player_id=buff.player_id,
+                attack_delta=buff.attack_delta,
+                evasion_delta=buff.evasion_delta,
+                self_damage=buff.self_damage,
+            )
+            for buff in match_state.active_buffs
+        ],
         players=[to_player_response(player) for player in match_state.players],
     )
 
