@@ -12,3 +12,4 @@ class GameSettings(BaseSettings):
     cp_per_turn: int = 2
     runway_health: int = 20
     cards_path: str = str(_REPO_ROOT / "cards")
+    db_path: str = str(_REPO_ROOT / "aces.db")
